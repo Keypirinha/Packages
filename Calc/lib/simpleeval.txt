@@ -1,0 +1,3 @@
+This is SimpleEval (C) 2013-2016 Daniel Fairhead
+Source: https://github.com/danthedeckie/simpleeval
+Revision: bd381582cb5d94859f6f54f2ce1f87354eb32e5a
