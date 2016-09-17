@@ -123,12 +123,12 @@ class FileBrowser(kp.Plugin):
                 self.set_suggestions(suggestions, match_method, sort_method)
             elif exists:
                 clone = current_item.clone()
-                clone.set_args(user_input)
+                clone.set_args(orig_user_input)
                 clone.set_loop_on_suggest(False)
                 self.set_suggestions([clone], kp.Match.ANY, kp.Sort.NONE)
             else:
                 self.set_suggestions([self.create_error_item(
-                    label=user_input,
+                    label=orig_user_input,
                     short_desc="File/Dir not found: " + current_item.target())])
 
     def on_execute(self, item, action):
