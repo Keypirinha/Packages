@@ -106,6 +106,7 @@ class Apps(kp.Plugin):
                     args = kpu.cmdline_split(cmdline)
                     kpu.shell_execute(
                         args[0], args=args[1:],
+                        verb="runas" if custcmd['elevated'] else "",
                         detect_nongui=custcmd['auto_terminal'])
                 except:
                     traceback.print_exc()
@@ -205,6 +206,9 @@ class Apps(kp.Plugin):
             cmd_auto_terminal = settings.get_bool(
                 "auto_terminal", section=section, fallback=default_auto_terminal)
 
+            cmd_elevated = settings.get_bool(
+                "elevated", section=section, fallback=False)
+
             cmd_has_placeholders = any(map(
                 lambda s: self.REGEX_PLACEHOLDER.search(s) is not None,
                 cmd_lines))
@@ -220,7 +224,8 @@ class Apps(kp.Plugin):
                 'args_hint': cmd_args_hint,
                 'hit_hint': cmd_hit_hint,
                 'icon_handle': self._customcmd_icon(cmd_lines),
-                'auto_terminal': cmd_auto_terminal}
+                'auto_terminal': cmd_auto_terminal,
+                'elevated': cmd_elevated}
 
     def _catalog_path(self):
         # get PATHEXT
