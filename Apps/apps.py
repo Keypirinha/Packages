@@ -434,7 +434,7 @@ class Apps(kp.Plugin):
                     start_pos = rem.start() + len(args_str)
                 elif placeholder in ("q*", "qargs"):
                     if not len(args):
-                        cmdline = cmdline[0:rem.start()] + "" + cmdline[rem.end():]
+                        cmdline = cmdline[0:rem.start()] + cmdline[rem.end():]
                         start_pos = rem.start()
                     else:
                         quoted_args = kpu.cmdline_quote(args, force_quote=True)
