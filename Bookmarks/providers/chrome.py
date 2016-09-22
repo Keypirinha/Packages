@@ -67,12 +67,12 @@ class ChromeProviderBase(BookmarksProviderBase):
 
         try:
             fh = kpu.chardet_open(bookmarks_file, mode="rt")
-        except OSError as e:
+        except OSError:
             pass
-        except Exception as e:
+        except Exception as exc:
             self.plugin.warn(
                 "Failed to read Bookmarks file: {}. Error: {}".format(
-                    bookmarks_file, e))
+                    bookmarks_file, exc))
         else:
             with fh:
                 return _extract_bookmarks(json.load(fh))

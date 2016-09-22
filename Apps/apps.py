@@ -255,8 +255,8 @@ class Apps(kp.Plugin):
                 entries = kpu.scan_directory(
                     path_dir, self.pathext, kpu.ScanFlags.FILES,
                     max_level=0)
-            except OSError as e:
-                #self.dbg("Exception raised while scanning PATH:", e)
+            except OSError as exc:
+                #self.dbg("Exception raised while scanning PATH:", exc)
                 continue
 
             if self.should_terminate():
@@ -363,8 +363,8 @@ class Apps(kp.Plugin):
                         files = kpu.scan_directory(
                             globbed_path, self.pathext, kpu.ScanFlags.FILES,
                             max_level=0)
-                    except IOError as e:
-                        self.warn(e)
+                    except IOError as exc:
+                        self.warn(exc)
                         continue
                     files = [ os.path.join(globbed_path, f) for f in files ]
                 elif os.path.isfile(globbed_path):

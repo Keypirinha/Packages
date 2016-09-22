@@ -23,8 +23,8 @@ class InternetExplorerProvider(BookmarksProviderBase):
             try:
                 url_files = kpu.scan_directory(
                                     favdir, "*.url", kpu.ScanFlags.FILES, -1)
-            except OSError as e:
-                print(self.__class__.__name__ + ":", e, file=sys.stderr)
+            except OSError as exc:
+                print(self.__class__.__name__ + ":", exc, file=sys.stderr)
                 continue
             for url_file in url_files:
                 url_file = os.path.join(favdir, url_file)
@@ -51,8 +51,8 @@ class InternetExplorerProvider(BookmarksProviderBase):
                     if bk_url:
                         bk_label = os.path.splitext(os.path.basename(url_file))[0]
                         bookmarks.append(Bookmark(self.label, bk_label, bk_url))
-                except Exception as e:
+                except Exception as exc:
                     self.plugin.warn(
                         "Failed to read URL file: {}. Error: {}".format(
-                            url_file, e))
+                            url_file, exc))
         return bookmarks

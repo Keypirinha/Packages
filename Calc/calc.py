@@ -232,12 +232,12 @@ class Calc(kp.Plugin):
                     target=res,
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
                     hit_hint=kp.ItemHitHint.IGNORE))
-        except Exception as e:
+        except Exception as exc:
             if not eval_requested:
                 return # stay quiet if evaluation hasn't been explicitly requested
             suggestions.append(self.create_error_item(
                 label=user_input,
-                short_desc="Error: " + str(e)))
+                short_desc="Error: " + str(exc)))
 
         self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 

@@ -110,8 +110,8 @@ class URL(kp.Plugin):
         for resource in sorted(self.find_resources("tld-*.txt")):
             try:
                 lines = self.load_text_resource(resource).splitlines()
-            except Exception as e:
-                self.warn("Failed to load DB resource \"{}\". Error: {}".format(resource, e))
+            except Exception as exc:
+                self.warn("Failed to load DB resource \"{}\". Error: {}".format(resource, exc))
                 continue
             for line in lines:
                 line = line.strip().lower()

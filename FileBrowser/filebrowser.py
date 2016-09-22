@@ -164,8 +164,8 @@ class FileBrowser(kp.Plugin):
             if not home_value_lines:
                 try:
                     home_value_lines = [kpwt.get_known_folder_path(kpwt.FOLDERID_Profile)]
-                except OSError as e:
-                    self.warn(e)
+                except OSError as exc:
+                    self.warn(str(exc))
                     home_value_lines = []
 
             for idx in range(len(home_value_lines)):

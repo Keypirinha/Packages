@@ -71,8 +71,8 @@ class PuTTY(kp.Plugin):
             item_target = kpu.kwargs_decode(item.target())
             distro_name = item_target['dist']
             session_name = item_target['session']
-        except Exception as e:
-            self.dbg(e)
+        except Exception as exc:
+            self.dbg(str(exc))
             return
 
         # check if the desired distro is available and enabled
@@ -294,8 +294,8 @@ class PuTTY(kp.Plugin):
                     os.path.join(known_dir, f)
                     for f in kpu.scan_directory(
                         known_dir, name_pattern, kpu.ScanFlags.FILES, -1)]
-            except Exception as e:
-                self.dbg(e)
+            except Exception as exc:
+                self.dbg(str(exc))
                 pass
 
         for link_file in found_link_files:
@@ -304,8 +304,8 @@ class PuTTY(kp.Plugin):
                 if (link_props['target'].lower().endswith(exe_name) and
                         os.path.exists(link_props['target'])):
                     return link_props['target']
-            except Exception as e:
-                self.dbg(e)
+            except Exception as exc:
+                self.dbg(str(exc))
                 pass
 
         return None

@@ -62,8 +62,8 @@ class WebSearch(kp.Plugin):
         try:
             item_target = kpu.kwargs_decode(item.target())
             site_name = item_target['site']
-        except Exception as e:
-            self.dbg(e)
+        except Exception as exc:
+            self.dbg(str(exc))
             return
 
         if site_name not in self.sites:

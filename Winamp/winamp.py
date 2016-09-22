@@ -290,8 +290,7 @@ class WinampRemote:
                 result = ctypes.windll.user32.SendMessageW(
                     self.wa_hwnd, msgId, wparam, lparam)
                 winerr = ctypes.GetLastError()
-            except Exception as e:
-                #print(e)
+            except Exception:
                 return None
 
             if winerr == 0:

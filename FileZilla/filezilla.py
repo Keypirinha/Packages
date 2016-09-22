@@ -70,8 +70,8 @@ class FileZilla(kp.Plugin):
             item_target = kpu.kwargs_decode(item.target())
             distro_name = item_target['dist']
             session_name = item_target['session']
-        except Exception as e:
-            self.dbg(e)
+        except Exception as exc:
+            self.dbg(str(exc))
             return
 
         # check if the desired distro is available and enabled
@@ -245,8 +245,8 @@ class FileZilla(kp.Plugin):
                 xml_folders = xml_root.findall("./Servers/Folder")
                 for xml_folder in xml_folders:
                     xml_sessions += _recurse_folder(xml_folder)
-            except Exception as e:
-                self.err('Failed to parse "{}". Error: {}'.format(sessions_file, e))
+            except Exception as exc:
+                self.err('Failed to parse "{}". Error: {}'.format(sessions_file, exc))
 
         # encode session names
         # FileZilla needs the session name to be escaped when passed as a
@@ -299,8 +299,8 @@ class FileZilla(kp.Plugin):
                     os.path.join(known_dir, f)
                     for f in kpu.scan_directory(
                         known_dir, name_pattern, kpu.ScanFlags.FILES, -1)]
-            except Exception as e:
-                self.dbg(e)
+            except Exception as exc:
+                self.dbg(str(exc))
                 pass
 
         for link_file in found_link_files:
@@ -309,8 +309,8 @@ class FileZilla(kp.Plugin):
                 if (link_props['target'].lower().endswith(exe_name) and
                         os.path.exists(link_props['target'])):
                     return link_props['target']
-            except Exception as e:
-                self.dbg(e)
+            except Exception as exc:
+                self.dbg(str(exc))
                 pass
 
         return None

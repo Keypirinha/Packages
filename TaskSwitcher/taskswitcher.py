@@ -40,8 +40,8 @@ class TaskSwitcher(kp.Plugin):
 
         try:
             handles = AltTab.list_alttab_windows()
-        except OSError as e:
-            self.err("Failed to list Alt+Tab windows. ", e)
+        except OSError as exc:
+            self.err("Failed to list Alt+Tab windows.", str(exc))
             return
 
         suggestions = []

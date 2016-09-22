@@ -85,10 +85,10 @@ class FirefoxProvider(BookmarksProviderBase):
             profiles_db = FirefoxProfilesDb()
             try:
                 profiles_db.read(profiles_file)
-            except Exception as e:
+            except Exception as exc:
                 self.plugin.warn(
                     "Failed to read Firefox's profiles file \"{}\". Error: {}".format(
-                        profiles_file, e))
+                        profiles_file, exc))
                 return []
 
             places_files = []
@@ -103,8 +103,8 @@ class FirefoxProvider(BookmarksProviderBase):
         for f in places_files:
             try:
                 bookmarks += self._read_places_file(os.path.normpath(f))
-            except Exception as e:
-                self.plugin.warn("Failed to read Firefox's bookmarks file \"{}\". Error: {}".format(f, e))
+            except Exception as exc:
+                self.plugin.warn("Failed to read Firefox's bookmarks file \"{}\". Error: {}".format(f, exc))
                 continue
         return bookmarks
 
