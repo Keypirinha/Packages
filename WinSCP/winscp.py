@@ -58,6 +58,12 @@ class WinSCP(kp.Plugin):
                     hit_hint=kp.ItemHitHint.NOARGS))
         self.set_catalog(catalog)
 
+    def on_suggest(self, user_input, items_chain):
+        if items_chain and items_chain[-1].category() == kp.ItemCategory.FILE:
+            clone = items_chain[-1].clone()
+            clone.set_args(user_input)
+            self.set_suggestions([clone])
+
     def on_execute(self, item, action):
         if item.category() == kp.ItemCategory.FILE:
             kpu.execute_default_action(self, item, action)
