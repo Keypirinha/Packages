@@ -3,7 +3,6 @@
 import keypirinha as kp
 import keypirinha_util as kpu
 import keypirinha_wintypes as kpwt
-import natsort
 
 import ctypes as ct
 import os
