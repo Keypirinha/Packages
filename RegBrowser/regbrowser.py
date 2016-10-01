@@ -15,7 +15,7 @@ _KeyValue = collections.namedtuple(
             "KeyValue",
             ("name", "data", "data_type"))
 
-class WinReg(kp.Plugin):
+class RegBrowser(kp.Plugin):
     """Browse and open Windows Registry keys"""
     ITEMCAT_REGKEY = kp.ItemCategory.USER_BASE + 1
     ITEMCAT_REGVALUE = kp.ItemCategory.USER_BASE + 2
