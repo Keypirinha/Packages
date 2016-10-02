@@ -269,7 +269,7 @@ class Calc(kp.Plugin):
                 # separator configured by system's user
                 GetLocaleInfoEx = kpwt.declare_func(
                     kpwt.kernel32, "GetLocaleInfoEx", ret=kpwt.ct.c_int,
-                    arg=[kpwt.LPCWSTR, kpwt.DWORD, kpwt.PWSTR, kpwt.ct.c_int])
+                    args=[kpwt.LPCWSTR, kpwt.DWORD, kpwt.PWSTR, kpwt.ct.c_int])
                 LOCALE_SDECIMAL = 0x0000000E
                 buf = kpwt.ct.create_unicode_buffer(10)
                 res = GetLocaleInfoEx(None, LOCALE_SDECIMAL, buf, len(buf))
@@ -518,7 +518,7 @@ class Calc(kp.Plugin):
                 # use the GetCurrencyFormatEx windows api to format the value
                 GetCurrencyFormatEx = kpwt.declare_func(
                     kpwt.kernel32, "GetCurrencyFormatEx", ret=kpwt.ct.c_int,
-                    arg=[kpwt.LPCWSTR, kpwt.DWORD, kpwt.LPCWSTR, kpwt.LPVOID, kpwt.PWSTR, kpwt.ct.c_int])
+                    args=[kpwt.LPCWSTR, kpwt.DWORD, kpwt.LPCWSTR, kpwt.LPVOID, kpwt.PWSTR, kpwt.ct.c_int])
                 buf = kpwt.ct.create_unicode_buffer(128)
                 res = GetCurrencyFormatEx(
                     None, 0, value_to_api, None, buf, len(buf))

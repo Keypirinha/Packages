@@ -162,7 +162,7 @@ class FileBrowser(kp.Plugin):
             # apply default "home" value if needed
             if not home_value_lines:
                 try:
-                    home_value_lines = [kpwt.get_known_folder_path(kpwt.FOLDERID_Profile)]
+                    home_value_lines = [kpwt.get_known_folder_path(kpwt.FOLDERID.Profile)]
                 except OSError as exc:
                     self.warn(str(exc))
                     home_value_lines = []
