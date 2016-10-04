@@ -15,7 +15,7 @@ _KeyValue = collections.namedtuple(
             "KeyValue",
             ("name", "data", "data_type"))
 
-class WinReg(kp.Plugin):
+class RegBrowser(kp.Plugin):
     """Browse and open Windows Registry keys"""
     ITEMCAT_REGKEY = kp.ItemCategory.USER_BASE + 1
     ITEMCAT_REGVALUE = kp.ItemCategory.USER_BASE + 2
@@ -63,27 +63,26 @@ class WinReg(kp.Plugin):
             if keypath:
                 if self._readable_key(keypath):
                     # the given key path is accessible
-                    suggestions, match_method, sort_method = self._enum_key(
-                                                                    keypath, "")
+                    suggestions = self._enum_key(keypath, "")
                 else:
                     # the given key path does not exist or is not readable, in
                     # which case we consider the trailing part of the given path
                     # to be search term that helps matching subkeys by name
                     parent_keypath, search_term = self._parent_key(keypath)
                     if parent_keypath:
-                        suggestions, match_method, sort_method = self._enum_key(
-                                                    parent_keypath, search_term)
+                        suggestions = self._enum_key(parent_keypath, search_term)
 
         # key selected, enumerate subkeys and optionally match their name
         # against user_input, if any
         elif items_chain and items_chain[-1].category() == self.ITEMCAT_REGKEY:
             keypath = self._parse_key(items_chain[-1].target())
             if keypath:
-                suggestions, match_method, sort_method = self._enum_key(
-                                        keypath, user_input, show_error=False)
+                suggestions = self._enum_key(
+                                        keypath, user_input,
+                                        show_error=False, loop_on_current=False)
 
         if suggestions:
-            self.set_suggestions(suggestions, match_method, sort_method)
+            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
     def on_execute(self, item, action):
         if item.category() in (self.ITEMCAT_REGKEY, self.ITEMCAT_REGVALUE):
@@ -149,8 +148,8 @@ class WinReg(kp.Plugin):
             pass
         return False
 
-    def _enum_key(self, keypath, user_input="", show_error=True):
-        def _sort(sequence, do_natsort):
+    def _enum_key(self, keypath, user_input="", show_error=True, loop_on_current=True):
+        def _sort_names(sequence, do_natsort):
             if do_natsort:
                 yield from natsort.natsorted(
                     sequence,
@@ -158,17 +157,19 @@ class WinReg(kp.Plugin):
             else:
                 yield from sequence
 
+        def _sort_items(sequence):
+            # sort items using the score that is stored in the data_bag member,
+            # then clear it to avoid polluting the Catalog and the History
+            def _sortkey(item):
+                score = item.data_bag()
+                item.set_data_bag("")
+                return score
+            sequence.sort(key=_sortkey, reverse=True)
+
         user_input = user_input.strip()
         if not len(user_input):
             user_input = None
-
         items = []
-        if user_input is None:
-            match_method = kp.Match.ANY
-            sort_method = kp.Sort.NONE
-        else:
-            match_method = kp.Match.FUZZY
-            sort_method = kp.Sort.SCORE_DESC
 
         # open registry key
         try:
@@ -178,10 +179,10 @@ class WinReg(kp.Plugin):
                 items.append(self.create_error_item(
                     label=keypath.path,
                     short_desc="Registry key not found: " + keypath.path))
-            return (items, kp.Match.ANY, kp.Sort.NONE)
+            return items
 
         # enumerate keys and values
-        subkeys = []
+        subkeys = {}
         values = {}
         try:
             idx = 0
@@ -189,10 +190,13 @@ class WinReg(kp.Plugin):
                 try:
                     name = winreg.EnumKey(hkey, idx)
                     idx += 1
-                    if len(name) and (
-                            user_input is None or
-                            kpu.fuzzy_score(user_input, name) > 0):
-                        subkeys.append(name)
+                    if len(name):
+                        if user_input is None:
+                            score = None
+                        else:
+                            score = kpu.fuzzy_score(user_input, name)
+                        if score is None or score > 0:
+                            subkeys[name] = score
                 except OSError:
                     break
 
@@ -202,17 +206,22 @@ class WinReg(kp.Plugin):
                 try:
                     val = _KeyValue(*winreg.EnumValue(hkey, idx))
                     idx += 1
-                    if len(val.name) and (
-                            user_input is None or
-                            kpu.fuzzy_score(user_input, val.name) > 0):
-                        values[val.name] = val
+                    if user_input is None:
+                        score = None
+                    elif not len(val.name):
+                        score = 1 # name may be empty for the "(Default)" value
+                    else:
+                        score = kpu.fuzzy_score(user_input, val.name)
+                    if score is None or score > 0:
+                        values[val.name] = (val, score)
                 except OSError:
                     break
         finally:
             hkey.Close()
 
-        for subkey_name in _sort(subkeys, user_input is None):
+        for subkey_name in _sort_names(subkeys.keys(), user_input is None):
             full_path = keypath.path + "\\" + subkey_name
+            data_bag = None if subkeys[subkey_name] is None else str(subkeys[subkey_name])
             items.append(self.create_item(
                 category=self.ITEMCAT_REGKEY,
                 label=subkey_name,
@@ -220,10 +229,13 @@ class WinReg(kp.Plugin):
                 target=full_path,
                 args_hint=kp.ItemArgsHint.ACCEPTED,
                 hit_hint=kp.ItemHitHint.IGNORE,
-                loop_on_suggest=True))
-        for value_name in _sort(values.keys(), user_input is None):
+                loop_on_suggest=True,
+                data_bag=data_bag))
+
+        for value_name in _sort_names(values.keys(), user_input is None):
             full_path = keypath.path + "\\" + value_name
-            if values[value_name].data_type in (
+            data_bag = None if values[value_name][1] is None else str(values[value_name][1])
+            if values[value_name][0].data_type in (
                     winreg.REG_SZ, winreg.REG_MULTI_SZ, winreg.REG_EXPAND_SZ,
                     winreg.REG_LINK, winreg.REG_RESOURCE_LIST,
                     winreg.REG_FULL_RESOURCE_DESCRIPTOR,
@@ -233,12 +245,25 @@ class WinReg(kp.Plugin):
                 icon = self.icon_binvalue
             items.append(self.create_item(
                 category=self.ITEMCAT_REGVALUE,
-                label=value_name,
+                label="(Default)" if not len(value_name) else value_name,
                 short_desc=full_path,
                 target=full_path,
                 args_hint=kp.ItemArgsHint.FORBIDDEN,
                 hit_hint=kp.ItemHitHint.IGNORE,
                 loop_on_suggest=False,
-                icon_handle=icon))
+                icon_handle=icon,
+                data_bag=data_bag))
 
-        return (items, match_method, sort_method)
+        if user_input is None:
+            items.insert(0, self.create_item(
+                category=self.ITEMCAT_REGKEY,
+                label="\\",
+                short_desc=keypath.path,
+                target=keypath.path,
+                args_hint=kp.ItemArgsHint.ACCEPTED,
+                hit_hint=kp.ItemHitHint.IGNORE,
+                loop_on_suggest=loop_on_current))
+        else:
+            _sort_items(items)
+
+        return items
