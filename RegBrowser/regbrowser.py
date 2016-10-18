@@ -54,6 +54,27 @@ class RegBrowser(kp.Plugin):
         self.icon_strvalue = self.load_icon(
                     "res://{}/icons/str.ico".format(self.package_full_name()))
 
+        # register actions
+        actions = [
+            self.create_action(
+                name="open",
+                label="Open in Regedit",
+                short_desc="Open regedit at the key's position"),
+            self.create_action(
+                name="copy_fullpath",
+                label="Copy full path",
+                short_desc="Copy key's full path to clipboard"),
+            self.create_action(
+                name="copy_parentpath",
+                label="Copy parent's path",
+                short_desc="Copy the path of the parent key to clipboard"),
+            self.create_action(
+                name="copy_value",
+                label="Copy value",
+                short_desc="Copy key's value to clipboard")]
+        self.set_actions(self.ITEMCAT_REGKEY, actions)
+        self.set_actions(self.ITEMCAT_REGVALUE, actions)
+
     def on_suggest(self, user_input, items_chain):
         suggestions = []
 
@@ -85,29 +106,72 @@ class RegBrowser(kp.Plugin):
             self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
     def on_execute(self, item, action):
-        if item.category() in (self.ITEMCAT_REGKEY, self.ITEMCAT_REGVALUE):
-            keypath = self._parse_key(item.target())
-            if keypath and item.category() == self.ITEMCAT_REGVALUE:
-                keypath = self._parent_key(keypath)[0]
+        if item.category() not in (self.ITEMCAT_REGKEY, self.ITEMCAT_REGVALUE):
+            return
 
-            if keypath and self._readable_key(keypath):
-                try:
-                    with winreg.OpenKey(
-                            winreg.HKEY_CURRENT_USER,
-                            "Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
-                            access=winreg.KEY_WRITE) as hkey:
-                        winreg.SetValueEx(
-                            hkey, "LastKey", 0, winreg.REG_SZ, keypath.path)
-                except OSError as exc:
-                    self.warn("Failed to initialize regedit. Error:", str(exc))
-                    return
+        keypath_full = self._parse_key(item.target())
+        if not keypath_full:
+            self.warn('Invalid registry key "{}"'.format(item.target()))
+            return
 
-                try:
-                    kpu.shell_execute(
-                        "regedit.exe", args=("/m", ),
-                        try_runas=True, detect_nongui=False)
-                except Exception as exc:
-                    self.warn("Failed to launch regedit. Error:", str(exc))
+        # copy full path
+        if action is not None and action.name() == "copy_fullpath":
+            kpu.set_clipboard(keypath_full.path)
+
+        # copy parent's path
+        elif action is not None and action.name() == "copy_parentpath":
+            if (item.category() == self.ITEMCAT_REGVALUE and
+                    item.target()[-1] in ("\\", "/")): # "default" value?
+                keypath_parent = keypath_full
+            else:
+                keypath_parent = self._parent_key(keypath_full)[0]
+
+            if keypath_parent:
+                kpu.set_clipboard(keypath_parent.path)
+            else:
+                kpu.set_clipboard("")
+
+        # copy value (or "default" value)
+        elif action is not None and action.name() == "copy_value":
+            if item.category() == self.ITEMCAT_REGVALUE:
+                if item.target()[-1] in ("\\", "/"): # "default" value?
+                    keypath_parent, value_name = (keypath_full, "")
+                else:
+                    keypath_parent, value_name = self._parent_key(keypath_full)
+            else:
+                keypath_parent, value_name = (keypath_full, "")
+
+            try:
+                with winreg.OpenKey(
+                        keypath_parent.root_hkey,
+                        keypath_parent.subkey,
+                        access=winreg.KEY_READ) as hkey:
+                    value = winreg.QueryValueEx(hkey, value_name)[0]
+                    value = "" if value is None else str(value)
+                    kpu.set_clipboard(value)
+            except OSError as exc:
+                self.warn('Failed to open registry key "{}". Error: {}'.format(keypath_parent.path, exc))
+                kpu.set_clipboard("")
+
+        # open key in regedit
+        elif self._readable_key(keypath_full):
+            try:
+                with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        "Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
+                        access=winreg.KEY_WRITE) as hkey:
+                    winreg.SetValueEx(
+                        hkey, "LastKey", 0, winreg.REG_SZ, keypath_full.path)
+            except OSError as exc:
+                self.warn("Failed to initialize regedit. Error:", str(exc))
+                return
+
+            try:
+                kpu.shell_execute(
+                    "regedit.exe", args=("/m", ),
+                    try_runas=True, detect_nongui=False)
+            except Exception as exc:
+                self.warn("Failed to launch regedit. Error:", str(exc))
 
     def _parse_key(self, keypath):
         # normalize
