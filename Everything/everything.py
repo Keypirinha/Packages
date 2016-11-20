@@ -65,9 +65,10 @@ class Everything(kp.Plugin):
                 return
             try:
                 with self.mutex:
-                    self.set_suggestions(self._search(
-                        user_input,
-                        current_item.target() == "search_regex"),
+                    self.set_suggestions(
+                        self._search(
+                            user_input,
+                            current_item.target() == "search_regex"),
                         kp.Match.ANY, kp.Sort.NONE)
             except evipc.EverythingNotFound:
                 self.warn("Everything instance not found")
