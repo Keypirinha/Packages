@@ -153,15 +153,27 @@ class RegBrowser(kp.Plugin):
                 self.warn('Failed to open registry key "{}". Error: {}'.format(keypath_parent.path, exc))
                 kpu.set_clipboard("")
 
-        # open key in regedit
-        elif self._readable_key(keypath_full):
+        # open key/value in regedit
+        else:
+            if item.category() == self.ITEMCAT_REGKEY:
+                key_to_open = keypath_full
+            elif item.category() == self.ITEMCAT_REGVALUE:
+                key_to_open, value_name = self._parent_key(keypath_full)
+            else:
+                self.warn("Unknown item category: {}", item.category())
+                return
+
+            if not self._readable_key(key_to_open):
+                self.warn('Registry key not found or not readable "{}"'.format(keypath_full.path))
+                return
+
             try:
                 with winreg.OpenKey(
                         winreg.HKEY_CURRENT_USER,
                         "Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
                         access=winreg.KEY_WRITE) as hkey:
                     winreg.SetValueEx(
-                        hkey, "LastKey", 0, winreg.REG_SZ, keypath_full.path)
+                        hkey, "LastKey", 0, winreg.REG_SZ, key_to_open.path)
             except OSError as exc:
                 self.warn("Failed to initialize regedit. Error:", str(exc))
                 return
