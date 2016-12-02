@@ -20,6 +20,7 @@ class Apps(kp.Plugin):
     CONFIG_SECTION_CUSTOMCMD_DEFAULTS = "custom_commands"
     CONFIG_SECTION_CUSTOMCMD = "cmd"
     DEFAULT_SCAN_START_MENU = True
+    DEFAULT_SCAN_DESKTOP = True
     DEFAULT_SCAN_ENV_PATH = True
     DEFAULT_ITEM_LABEL_FORMAT = "{cmd_name}"
     DEFAULT_HISTORY_KEEP = kp.ItemHitHint.NOARGS
@@ -27,6 +28,7 @@ class Apps(kp.Plugin):
     REGEX_PLACEHOLDER = re.compile(r"\{\{(q?args|q?\*|q?\d+)\}\}", re.ASCII)
 
     scan_start_menu = DEFAULT_SCAN_START_MENU
+    scan_desktop = DEFAULT_SCAN_DESKTOP
     scan_env_path = DEFAULT_SCAN_ENV_PATH
 
     pathext_orig = ""
@@ -70,6 +72,12 @@ class Apps(kp.Plugin):
         # Start Menu
         if self.scan_start_menu:
             catalog.extend(self._catalog_startmenu())
+            if self.should_terminate():
+                return
+
+        # Desktop
+        if self.scan_desktop:
+            catalog.extend(self._catalog_desktop())
             if self.should_terminate():
                 return
 
@@ -138,6 +146,11 @@ class Apps(kp.Plugin):
             "scan_start_menu",
             self.CONFIG_SECTION_MAIN,
             self.DEFAULT_SCAN_START_MENU)
+
+        self.scan_desktop = settings.get_bool(
+            "scan_desktop",
+            self.CONFIG_SECTION_MAIN,
+            self.DEFAULT_SCAN_DESKTOP)
 
         self.scan_env_path = settings.get_bool(
             "scan_env_path",
@@ -277,53 +290,71 @@ class Apps(kp.Plugin):
     def _catalog_startmenu(self):
         KNOWN_FOLDERS = (
             # label, desc, guid, scan recursively
-            ("PublicDesktop", "Desktop", "{c4aa340d-f20f-4863-afef-f87ef2e6ba25}", False), # %PUBLIC%\Desktop
-            ("Desktop", "Desktop", "{b4bfcc3a-db2c-424c-b029-7fe99a87c641}", False), # %USERPROFILE%\Desktop
             ("CommonStartup", "Start Menu", "{82a5ea35-d9cd-47c5-9629-e15d2f714e6e}", True), # %ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\StartUp
             ("Startup", "Start Menu", "{b97d20bb-f46a-4c97-ba10-5e3608430854}", True), # %APPDATA%\Microsoft\Windows\Start Menu\Programs\StartUp
             ("StartMenu", "Start Menu", "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}", True), # %APPDATA%\Microsoft\Windows\Start Menu
             ("CommonStartMenu", "Start Menu", "{a4115719-d62e-491d-aa7c-e74b8be3b067}", True)) # %ALLUSERSPROFILE%\Microsoft\Windows\Start Menu
+
         catalog = []
-
         for kf in KNOWN_FOLDERS:
-            try:
-                kf_path = kpu.shell_known_folder_path(kf[2])
-            except OSError:
-                self.warn("Failed to get path of known folder {}".format(kf[0]))
-                continue
-
+            catalog.extend(self._catalog_knownfolder(kf[0], kf[1], kf[2], kf[3]))
             if self.should_terminate():
                 return []
+        return catalog
 
-            max_scan_level = -1 if kf[3] else 0
-            try:
-                files = kpu.scan_directory(
-                    kf_path, ('*'), flags=kpu.ScanFlags.FILES,
-                    max_level=max_scan_level)
-            except IOError:
-                continue
+    def _catalog_desktop(self):
+        KNOWN_FOLDERS = (
+            # label, desc, guid, scan recursively
+            ("PublicDesktop", "Desktop", "{c4aa340d-f20f-4863-afef-f87ef2e6ba25}", False), # %PUBLIC%\Desktop
+            ("Desktop", "Desktop", "{b4bfcc3a-db2c-424c-b029-7fe99a87c641}", False)) # %USERPROFILE%\Desktop
 
+        catalog = []
+        for kf in KNOWN_FOLDERS:
+            catalog.extend(self._catalog_knownfolder(kf[0], kf[1], kf[2], kf[3]))
             if self.should_terminate():
                 return []
+        return catalog
 
-            for relative in files:
-                f = os.path.normpath(os.path.join(kf_path, relative))
-                label = os.path.splitext(os.path.basename(f))[0]
-                desc = os.path.dirname(relative)
+    def _catalog_knownfolder(self, kf_label, kf_desc, kf_guid, recursive_scan):
+        try:
+            kf_path = kpu.shell_known_folder_path(kf_guid)
+        except OSError:
+            self.warn("Failed to get path of known folder {}".format(kf_label))
+            return []
 
-                if not len(desc):
-                    desc = os.path.basename(kf_path)
-                if not len(desc):
-                    desc = label
-                desc = "{}: {}".format(kf[1], desc)
+        if self.should_terminate():
+            return []
 
-                catalog.append(self.create_item(
-                    category=kp.ItemCategory.FILE,
-                    label=label,
-                    short_desc=desc,
-                    target=f,
-                    args_hint=kp.ItemArgsHint.ACCEPTED,
-                    hit_hint=kp.ItemHitHint.KEEPALL))
+        max_scan_level = -1 if recursive_scan else 0
+        try:
+            files = kpu.scan_directory(
+                kf_path, ('*'), flags=kpu.ScanFlags.FILES,
+                max_level=max_scan_level)
+        except IOError:
+            return []
+
+        if self.should_terminate():
+            return []
+
+        catalog = []
+        for relative in files:
+            f = os.path.normpath(os.path.join(kf_path, relative))
+            label = os.path.splitext(os.path.basename(f))[0]
+            desc = os.path.dirname(relative)
+
+            if not len(desc):
+                desc = os.path.basename(kf_path)
+            if not len(desc):
+                desc = label
+            desc = kf_desc + ": " + desc
+
+            catalog.append(self.create_item(
+                category=kp.ItemCategory.FILE,
+                label=label,
+                short_desc=desc,
+                target=f,
+                args_hint=kp.ItemArgsHint.ACCEPTED,
+                hit_hint=kp.ItemHitHint.KEEPALL))
 
         return catalog
 
@@ -383,6 +414,8 @@ class Apps(kp.Plugin):
                         target=f,
                         args_hint=kp.ItemArgsHint.ACCEPTED,
                         hit_hint=kp.ItemHitHint.KEEPALL))
+                    if len(catalog) % 100 == 0 and self.should_terminate():
+                        return []
 
         return catalog
 
