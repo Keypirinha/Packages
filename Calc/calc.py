@@ -153,6 +153,8 @@ class Calc(kp.Plugin):
     }
 
     always_evaluate = DEFAULT_ALWAYS_EVALUATE
+    decimal_separator = "."
+    thousand_separator = ","
     transmap_input = ""
     transmap_output = ""
     rounding_precision = DEFAULT_ROUNDING_PRECISION
@@ -258,33 +260,53 @@ class Calc(kp.Plugin):
 
         # [main] decimal_separator
         DEFAULT_DECIMAL_SEPARATOR = "dot"
-        decimal_separator = settings.get_enum(
+        self.decimal_separator = "."
+        self.thousand_separator = ","
+        config_decsep = settings.get_enum(
             "decimal_separator", "main",
             fallback=DEFAULT_DECIMAL_SEPARATOR,
             enum=["dot", "comma", "auto"])
-        if decimal_separator == "auto":
-            decimal_separator = DEFAULT_DECIMAL_SEPARATOR
+        if config_decsep == "auto":
+            config_decsep = DEFAULT_DECIMAL_SEPARATOR
             try:
-                # use the GetLocaleInfoEx windows api to get the decimal
-                # separator configured by system's user
+                # use the GetLocaleInfoEx windows api to get the decimal and
+                # thousand separators configured by system's user
                 GetLocaleInfoEx = kpwt.declare_func(
                     kpwt.kernel32, "GetLocaleInfoEx", ret=kpwt.ct.c_int,
                     args=[kpwt.LPCWSTR, kpwt.DWORD, kpwt.PWSTR, kpwt.ct.c_int])
                 LOCALE_SDECIMAL = 0x0000000E
+                LOCALE_STHOUSAND = 0x0000000F
+
+                # decimal separator
                 buf = kpwt.ct.create_unicode_buffer(10)
                 res = GetLocaleInfoEx(None, LOCALE_SDECIMAL, buf, len(buf))
                 if res == 2 and len(buf.value) == res - 1 and buf.value == ",":
-                    decimal_separator = "comma"
+                    config_decsep = "comma"
+
+                # thousand separator
+                # quite awful to have a try block here but we take advantage of
+                # having GetLocaleInfoEx already defined
+                try:
+                    buf = kpwt.ct.create_unicode_buffer(10)
+                    res = GetLocaleInfoEx(None, LOCALE_STHOUSAND, buf, len(buf))
+                    if res > 0:
+                        self.thousand_separator = buf
+                except:
+                    traceback.print_exc()
             except:
                 self.warn(
-                    "Failed to get system user decimal separator value. " +
-                    "Falling back to default (" + decimal_separator + ")...")
+                    "Failed to get system user decimal and thousand separators. " +
+                    "Falling back to default (" + config_decsep + ")...")
                 traceback.print_exc()
-            self.info("Using \"{}\" as a decimal separator".format(decimal_separator))
-        if decimal_separator == "comma":
+            self.info("Using \"{}\" as a decimal separator".format(config_decsep))
+        if config_decsep == "comma":
+            self.decimal_separator = ","
+            self.thousand_separator = " "
             self.transmap_input = str.maketrans(",;", ".,")
             self.transmap_output = str.maketrans(".", ",")
         else:
+            self.decimal_separator = "."
+            self.thousand_separator = ","
             self.transmap_input = ""
             self.transmap_output = ""
 
@@ -380,13 +402,13 @@ class Calc(kp.Plugin):
             try:
                 if self.ans.lower().startswith("0b"):
                     self.ans = int(self.ans, base=2)
-                    return (bin(self.ans), self.ans, hex(self.ans), oct(self.ans)) + self._currencyfmt(self.ans)
+                    return (bin(self.ans), self.ans, hex(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 elif self.ans.lower().startswith("0o"):
                     self.ans = int(self.ans, base=8)
-                    return (oct(self.ans), self.ans, hex(self.ans), bin(self.ans)) + self._currencyfmt(self.ans)
+                    return (oct(self.ans), self.ans, hex(self.ans), bin(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 elif self.ans.lower().startswith("0x"):
                     self.ans = int(self.ans, base=16)
-                    return (hex(self.ans), self.ans, bin(self.ans), oct(self.ans)) + self._currencyfmt(self.ans)
+                    return (hex(self.ans), self.ans, bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 else:
                     self.ans = int(self.ans)
             except ValueError:
@@ -396,7 +418,7 @@ class Calc(kp.Plugin):
             self.ans = int(self.ans)
             return str(self.ans)
         elif isinstance(self.ans, int):
-            return (self.ans, hex(self.ans), bin(self.ans), oct(self.ans)) + self._currencyfmt(self.ans)
+            return (self.ans, hex(self.ans), bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
         elif isinstance(self.ans, float):
             self.ans = decimal.Decimal(self.ans)
         elif isinstance(self.ans, complex):
@@ -406,17 +428,19 @@ class Calc(kp.Plugin):
             if not self.ans.is_finite(): # nan or infinity
                 return str(self.ans)
             else:
-                do_trans = lambda s: str(s).translate(self.transmap_output).lower()
+                do_trans = lambda s: str(s).translate(self.transmap_output).lower().rstrip("0").rstrip(self.decimal_separator)
                 results = { # note: this is a set!
                     do_trans(self.ans.normalize()),
                     do_trans(self.ans),
                     do_trans(self.ans.to_eng_string())}
                 if self.rounding_precision is not None:
                     q = decimal.Decimal(10) ** -self.rounding_precision
-                    v = do_trans(self.ans.quantize(q)).rstrip("0").rstrip(".")
+                    v = do_trans(self.ans.quantize(q))
                     results.add(v)
                 results = list(results)
                 results.sort(key=len)
+                for v in self._numberfmt(self.ans):
+                    results.append(v)
                 results += list(self._currencyfmt(self.ans))
                 return results
 
@@ -503,6 +527,18 @@ class Calc(kp.Plugin):
 
         return tokenize.untokenize(trans_tokens).decode('utf-8')
 
+    def _numberfmt(self, value):
+        if not isinstance(value, (int, float, decimal.Decimal)):
+            return ()
+        if -999 <= value <= 999:
+            return ()
+        formatted_value = self._currencyfmt_impl(
+            decimal.Decimal(value), places=self.rounding_precision, curr="",
+            sep=self.thousand_separator, dp=self.decimal_separator,
+            neg="-", trailneg="")
+        formatted_value = formatted_value.rstrip("0").rstrip(self.decimal_separator)
+        return (formatted_value, )
+
     def _currencyfmt(self, value):
         if not self.currency_enabled:
             return ()
@@ -536,6 +572,7 @@ class Calc(kp.Plugin):
         formatted_value = self._currencyfmt_impl(
             value, places=self.currency_places,
             sep=self.currency_thousandsep, dp=self.currency_decsep)
+        formatted_value = formatted_value.rstrip("0").rstrip(self.currency_decsep)
         return (formatted_value, )
 
     def _currencyfmt_impl(
