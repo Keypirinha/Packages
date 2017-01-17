@@ -2,41 +2,19 @@
 
 import keypirinha as kp
 import keypirinha_util as kpu
+import keypirinha_wintypes as kpwt
 import os
-import time
 import glob
 import re
+import time
 import traceback
 
-class Apps(kp.Plugin):
-    """
-    Execute/open items located in the Start Menu, the environment's PATH, other
-    common Windows directories and any additional configured directories.
-    """
-
+class _BasePlugin(kp.Plugin):
     ITEMCAT_CUSTOMCMD = kp.ItemCategory.USER_BASE + 1
 
     CONFIG_SECTION_MAIN = "main"
     CONFIG_SECTION_CUSTOMCMD_DEFAULTS = "custom_commands"
     CONFIG_SECTION_CUSTOMCMD = "cmd"
-    DEFAULT_SCAN_START_MENU = True
-    DEFAULT_SCAN_DESKTOP = True
-    DEFAULT_SCAN_ENV_PATH = True
-    DEFAULT_ITEM_LABEL_FORMAT = "{cmd_name}"
-    DEFAULT_HISTORY_KEEP = kp.ItemHitHint.NOARGS
-
-    REGEX_PLACEHOLDER = re.compile(r"\{\{(q?args|q?\*|q?\d+)\}\}", re.ASCII)
-
-    scan_start_menu = DEFAULT_SCAN_START_MENU
-    scan_desktop = DEFAULT_SCAN_DESKTOP
-    scan_env_path = DEFAULT_SCAN_ENV_PATH
-
-    pathext_orig = ""
-    pathext = []
-    path_orig = ""
-    path = []
-    extra_paths = []
-    custom_cmds = {}
 
     def __init__(self):
         super().__init__()
@@ -44,11 +22,379 @@ class Apps(kp.Plugin):
     def on_start(self):
         self._read_config()
 
+    def on_suggest(self, user_input, items_chain):
+        if items_chain and items_chain[-1].category() in (
+                kp.ItemCategory.FILE, self.ITEMCAT_CUSTOMCMD):
+            clone = items_chain[-1].clone()
+            clone.set_args(user_input)
+            self.set_suggestions([clone])
+
+    def on_execute(self, item, action):
+        kpu.execute_default_action(self, item, action)
+
+    def _read_config(self):
+        raise NotImplementedError
+
+    def _log_catalog_duration(self, start_time, items_count):
+        elapsed = time.perf_counter() - start_time
+        self.info("Cataloged {} item{} in {:.1f} seconds".format(
+                        items_count, "s"[items_count==1:], elapsed))
+
+    def _read_env_path(self):
+        path_str = os.getenv("PATH", "")
+        path = [
+            os.path.expandvars(p.strip())
+                for p in path_str.split(";") if p.strip() ]
+
+        return (path_str, path)
+
+    def _read_env_pathext(self):
+        # get PATHEXT
+        # real life examples of PATHEXT value:
+        #   * WinXP machine: .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH
+        #   * Win8 machine: .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
+        pathext_str = os.getenv("PATHEXT", "")
+        pathext = [
+            "*" + p.strip() for p in
+                pathext_str.split(";")
+                    if p.strip() and p.strip()[0] == "."]
+        if not pathext:
+            pathext = [
+                "*.COM", "*.EXE", "*.BAT", "*.CMD", "*.VBS", "*.VBE", "*.JS",
+                "*.JSE", "*.WSF", "*.WSH", "*.MSC"]
+
+        return (pathext_str, pathext)
+
+    def _catalog_knownfolder(self, kf_guid, kf_label, kf_desc, recursive_scan):
+        try:
+            kf_path = kpu.shell_known_folder_path(kf_guid)
+        except OSError:
+            self.warn("Failed to get path of known folder {}".format(kf_label))
+            return []
+
+        if self.should_terminate():
+            return []
+
+        max_scan_level = -1 if recursive_scan else 0
+        try:
+            files = kpu.scan_directory(
+                kf_path, ('*'), flags=kpu.ScanFlags.FILES,
+                max_level=max_scan_level)
+        except IOError:
+            return []
+
+        if self.should_terminate():
+            return []
+
+        catalog = []
+        for relative in files:
+            f = os.path.normpath(os.path.join(kf_path, relative))
+            label = os.path.splitext(os.path.basename(f))[0]
+            desc = os.path.dirname(relative)
+
+            if not len(desc):
+                desc = os.path.basename(kf_path)
+            if not len(desc):
+                desc = label
+            desc = kf_desc + ": " + desc
+
+            catalog.append(self.create_item(
+                category=kp.ItemCategory.FILE,
+                label=label,
+                short_desc=desc,
+                target=f,
+                args_hint=kp.ItemArgsHint.ACCEPTED,
+                hit_hint=kp.ItemHitHint.KEEPALL))
+
+        return catalog
+
+
+class StartMenu(_BasePlugin):
+    DEFAULT_SCAN_START_MENU = True
+
+    scan_start_menu = DEFAULT_SCAN_START_MENU
+
+    def __init__(self):
+        super().__init__()
+
+    def on_catalog(self):
+        if not self.scan_start_menu:
+            self.set_catalog([])
+            return
+
+        known_folders = (
+            # folder, scan recursively
+            (kpwt.FOLDERID.CommonStartup, True),
+            (kpwt.FOLDERID.Startup, True),
+            (kpwt.FOLDERID.StartMenu, True),
+            (kpwt.FOLDERID.CommonStartMenu, True))
+
+        catalog = []
+        for kf in known_folders:
+            catalog.extend(self._catalog_knownfolder(
+                kf[0].value, kf[0].name, "Start Menu", kf[1]))
+            if self.should_terminate():
+                return
+
+        self.set_catalog(catalog)
+
+    def on_events(self, flags):
+        must_catalog = False
+
+        if flags & kp.Events.PACKCONFIG:
+            if self._read_config():
+                must_catalog = True
+
+        if (flags & kp.Events.STARTMENU) and self.scan_start_menu:
+            must_catalog = True
+
+        if must_catalog:
+            self.on_catalog()
+
+    def _read_config(self):
+        new_scan_start_menu = self.load_settings().get_bool(
+            "scan_start_menu",
+            self.CONFIG_SECTION_MAIN,
+            self.DEFAULT_SCAN_START_MENU)
+        config_changed = new_scan_start_menu != self.scan_start_menu
+        self.scan_start_menu = new_scan_start_menu
+        return config_changed
+
+
+class Desktop(_BasePlugin):
+    DEFAULT_SCAN_DESKTOP = True
+
+    scan_desktop = DEFAULT_SCAN_DESKTOP
+
+    def __init__(self):
+        super().__init__()
+
+    def on_catalog(self):
+        if not self.scan_desktop:
+            self.set_catalog([])
+            return
+
+        known_folders = (
+            # folder, scan recursively
+            (kpwt.FOLDERID.PublicDesktop, False),
+            (kpwt.FOLDERID.Desktop, False))
+
+        catalog = []
+        for kf in known_folders:
+            catalog.extend(self._catalog_knownfolder(
+                kf[0].value, kf[0].name, "Desktop", kf[1]))
+            if self.should_terminate():
+                return
+
+        self.set_catalog(catalog)
+
+    def on_events(self, flags):
+        must_catalog = False
+
+        if flags & kp.Events.PACKCONFIG:
+            if self._read_config():
+                must_catalog = True
+
+        if (flags & kp.Events.DESKTOP) and self.scan_desktop:
+            must_catalog = True
+
+        if must_catalog:
+            self.on_catalog()
+
+    def _read_config(self):
+        new_scan_desktop = self.load_settings().get_bool(
+            "scan_desktop",
+            self.CONFIG_SECTION_MAIN,
+            self.DEFAULT_SCAN_DESKTOP)
+        config_changed = new_scan_desktop != self.scan_desktop
+        self.scan_desktop = new_scan_desktop
+        return config_changed
+
+
+class EnvPath(_BasePlugin):
+    DEFAULT_SCAN_ENV_PATH = True
+
+    scan_env_path = DEFAULT_SCAN_ENV_PATH
+
+    pathext_str = ""
+    pathext = []
+    path_str = ""
+    path = []
+
+    def __init__(self):
+        super().__init__()
+
+    def on_catalog(self):
+        if not self.scan_env_path:
+            self.set_catalog([])
+            return
+
+        start = time.perf_counter()
+        self.path_str, self.path = self._read_env_path()
+        self.pathext_str, self.pathext = self._read_env_pathext()
+
+        catalog = []
+        for path_dir in self.path:
+            try:
+                entries = kpu.scan_directory(
+                    path_dir, self.pathext, kpu.ScanFlags.FILES,
+                    max_level=0)
+            except OSError as exc:
+                #self.dbg("Exception raised while scanning PATH:", exc)
+                continue
+
+            if self.should_terminate():
+                return
+
+            for entry in entries:
+                entry_path = os.path.normpath(os.path.join(path_dir, entry))
+                catalog.append(self.create_item(
+                    category=kp.ItemCategory.FILE,
+                    label=os.path.basename(entry),
+                    short_desc="",
+                    target=entry_path,
+                    args_hint=kp.ItemArgsHint.ACCEPTED,
+                    hit_hint=kp.ItemHitHint.KEEPALL))
+
+        self.set_catalog(catalog)
+        self._log_catalog_duration(start, len(catalog))
+
+    def on_events(self, flags):
+        must_catalog = False
+
+        if flags & kp.Events.PACKCONFIG:
+            if self._read_config():
+                must_catalog = True
+
+        if (flags & kp.Events.ENV) and self.scan_env_path and (
+                os.getenv("PATH", "") != self.path_str or
+                os.getenv("PATHEXT", "") != self.pathext_str):
+            self.info("PATH changed, rebuilding catalog...")
+            must_catalog = True
+
+        if must_catalog:
+            self.on_catalog()
+
+    def _read_config(self):
+        new_scan_env_path = self.load_settings().get_bool(
+            "scan_env_path",
+            self.CONFIG_SECTION_MAIN,
+            self.DEFAULT_SCAN_ENV_PATH)
+        config_changed = new_scan_env_path != self.scan_env_path
+        self.scan_env_path = new_scan_env_path
+        return config_changed
+
+
+class ExtraPaths(_BasePlugin):
+    pathext_str = ""
+    pathext = []
+    extra_paths = []
+
+    def __init__(self):
+        super().__init__()
+
     def on_catalog(self):
         start = time.perf_counter()
-        catalog = []
+        self.pathext_str, self.pathext = self._read_env_pathext()
 
-        # custom commands
+        catalog = []
+        for user_extra_path in self.extra_paths:
+            user_extra_path = user_extra_path.replace("/", os.sep)
+            has_trailing_sep = user_extra_path.endswith(os.sep)
+
+            if user_extra_path.startswith('::') and len(user_extra_path) >= 38:
+                (guid, tail) = (user_extra_path[2:].split(os.sep, maxsplit=1) + [None] * 2)[:2]
+                try:
+                    kf_path = kpu.shell_known_folder_path(guid)
+                    if tail is not None:
+                        user_extra_path = os.path.normpath(os.path.join(kf_path, tail))
+                    else:
+                        user_extra_path = kf_path
+                except OSError:
+                    self.warn("Failed to get path of known folder from setting \"{}\"".format(user_extra_path))
+                    continue
+            else:
+                user_extra_path = os.path.normpath(user_extra_path)
+
+            #user_extra_path = os.path.expandvars(user_extra_path) # not needed
+            if has_trailing_sep:
+                user_extra_path += os.sep
+
+            recursive_glob = "**" in user_extra_path
+            for globbed_path in glob.iglob(user_extra_path, recursive=recursive_glob):
+                if self.should_terminate():
+                    return
+
+                files = []
+                if os.path.isdir(globbed_path):
+                    try:
+                        files = kpu.scan_directory(
+                            globbed_path, self.pathext, kpu.ScanFlags.FILES,
+                            max_level=0)
+                    except IOError as exc:
+                        self.warn(exc)
+                        continue
+                    files = [ os.path.join(globbed_path, f) for f in files ]
+                elif os.path.isfile(globbed_path):
+                    files = [globbed_path]
+                else:
+                    continue # duh?!
+
+                if self.should_terminate():
+                    return
+
+                for f in files:
+                    catalog.append(self.create_item(
+                        category=kp.ItemCategory.FILE,
+                        label=os.path.basename(f),
+                        short_desc=f,
+                        target=f,
+                        args_hint=kp.ItemArgsHint.ACCEPTED,
+                        hit_hint=kp.ItemHitHint.KEEPALL))
+                    if len(catalog) % 100 == 0 and self.should_terminate():
+                        return
+
+        self.set_catalog(catalog)
+
+        if len(self.extra_paths):
+            self._log_catalog_duration(start, len(catalog))
+
+    def on_events(self, flags):
+        must_catalog = False
+
+        if flags & kp.Events.PACKCONFIG:
+            if self._read_config():
+                must_catalog = True
+
+        if ((flags & kp.Events.ENV) and len(self.extra_paths) and
+                os.getenv("PATHEXT", "") != self.pathext_str):
+            # some extra_paths implicitely make use of the PATHEXT env var
+            must_catalog = True
+
+        if must_catalog:
+            self.on_catalog()
+
+    def _read_config(self):
+        new_extra_paths = self.load_settings().get_multiline(
+            "extra_paths", self.CONFIG_SECTION_MAIN)
+        config_changed = new_extra_paths != self.extra_paths
+        self.extra_paths = new_extra_paths
+        return config_changed
+
+
+class CustomCmds(_BasePlugin):
+    DEFAULT_ITEM_LABEL_FORMAT = "{cmd_name}"
+    DEFAULT_HISTORY_KEEP = kp.ItemHitHint.NOARGS
+
+    REGEX_PLACEHOLDER = re.compile(r"\{\{(q?args|q?\*|q?\d+)\}\}", re.ASCII)
+
+    custom_cmds = {}
+
+    def __init__(self):
+        super().__init__()
+
+    def on_catalog(self):
+        catalog = []
         for cmd_name, custcmd in self.custom_cmds.items():
             if len(custcmd['cmds']) == 1:
                 cmd_desc = "Custom command: " + custcmd['cmds'][0]
@@ -63,73 +409,32 @@ class Apps(kp.Plugin):
                 hit_hint=custcmd['hit_hint'],
                 icon_handle=custcmd['icon_handle']))
 
-        # PATH
-        if self.scan_env_path:
-            catalog.extend(self._catalog_path())
-            if self.should_terminate():
-                return
-
-        # Start Menu
-        if self.scan_start_menu:
-            catalog.extend(self._catalog_startmenu())
-            if self.should_terminate():
-                return
-
-        # Desktop
-        if self.scan_desktop:
-            catalog.extend(self._catalog_desktop())
-            if self.should_terminate():
-                return
-
-        # extra_paths
-        catalog.extend(self._catalog_extrapaths())
-        if self.should_terminate():
-            return
-
         self.set_catalog(catalog)
 
-        elapsed = time.perf_counter() - start
-        self.info("Cataloged {} item{} in {:.1f} seconds".format(
-                        len(catalog), "s"[len(catalog)==1:], elapsed))
-
-    def on_suggest(self, user_input, items_chain):
-        if items_chain and items_chain[-1].category() in (
-                kp.ItemCategory.FILE, self.ITEMCAT_CUSTOMCMD):
-            clone = items_chain[-1].clone()
-            clone.set_args(user_input)
-            self.set_suggestions([clone])
-
     def on_execute(self, item, action):
-        if item.category() == self.ITEMCAT_CUSTOMCMD:
-            cmd_name = item.target()
-            if cmd_name not in self.custom_cmds:
-                self.warn('Could not execute item "{}". Custom command "{}" not found.'.format(item.label(), cmd_name))
-                return
+        # item's category is assumed to be self.ITEMCAT_CUSTOMCMD
 
-            custcmd = self.custom_cmds[cmd_name]
+        cmd_name = item.target()
+        if cmd_name not in self.custom_cmds:
+            self.warn('Could not execute item "{}". Custom command "{}" not found.'.format(item.label(), cmd_name))
+            return
 
-            cmd_lines = self._customcmd_apply_args(custcmd['cmds'][:], item.raw_args())
-            for cmdline in cmd_lines:
-                try:
-                    args = kpu.cmdline_split(cmdline)
-                    kpu.shell_execute(
-                        args[0], args=args[1:],
-                        verb="runas" if custcmd['elevated'] else "",
-                        detect_nongui=custcmd['auto_terminal'])
-                except:
-                    traceback.print_exc()
-        else:
-            kpu.execute_default_action(self, item, action)
+        custcmd = self.custom_cmds[cmd_name]
+
+        cmd_lines = self._customcmd_apply_args(custcmd['cmds'][:], item.raw_args())
+        for cmdline in cmd_lines:
+            try:
+                args = kpu.cmdline_split(cmdline)
+                kpu.shell_execute(
+                    args[0], args=args[1:],
+                    verb="runas" if custcmd['elevated'] else "",
+                    detect_nongui=custcmd['auto_terminal'])
+            except:
+                traceback.print_exc()
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
-            self.info("Configuration has changed, rebuilding catalog...")
             self._read_config()
-            self.on_catalog()
-        elif (flags & kp.Events.ENV) != 0 and self.scan_env_path and (
-                os.getenv("PATH", "") != self.path_orig or
-                os.getenv("PATHEXT", "") != self.pathext_orig):
-            self.info("PATH changed, rebuilding catalog...")
             self.on_catalog()
 
     def _read_config(self):
@@ -141,24 +446,6 @@ class Apps(kp.Plugin):
         self.custom_cmds = {}
 
         settings = self.load_settings()
-
-        self.scan_start_menu = settings.get_bool(
-            "scan_start_menu",
-            self.CONFIG_SECTION_MAIN,
-            self.DEFAULT_SCAN_START_MENU)
-
-        self.scan_desktop = settings.get_bool(
-            "scan_desktop",
-            self.CONFIG_SECTION_MAIN,
-            self.DEFAULT_SCAN_DESKTOP)
-
-        self.scan_env_path = settings.get_bool(
-            "scan_env_path",
-            self.CONFIG_SECTION_MAIN,
-            self.DEFAULT_SCAN_ENV_PATH)
-
-        self.extra_paths = settings.get_multiline(
-            "extra_paths", self.CONFIG_SECTION_MAIN)
 
         # read "custom_commands" section
         supported_history_keep_values = {
@@ -239,185 +526,6 @@ class Apps(kp.Plugin):
                 'icon_handle': self._customcmd_icon(cmd_lines),
                 'auto_terminal': cmd_auto_terminal,
                 'elevated': cmd_elevated}
-
-    def _catalog_path(self):
-        # get PATHEXT
-        # real life examples of PATHEXT value:
-        #   * WinXP machine: .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH
-        #   * Win8 machine: .COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
-        self.pathext_orig = os.getenv("PATHEXT", "")
-        self.pathext = [
-            "*" + p.strip() for p in
-                self.pathext_orig.split(";")
-                    if p.strip() and p.strip()[0] == "."]
-        if not self.pathext:
-            self.pathext = [
-                "*.COM", "*.EXE", "*.BAT", "*.CMD", "*.VBS", "*.VBE", "*.JS",
-                "*.JSE", "*.WSF", "*.WSH", "*.MSC"]
-
-        # get PATH
-        self.path_orig = os.getenv("PATH", "")
-        self.path = [
-            os.path.expandvars(p.strip())
-                for p in self.path_orig.split(";") if p.strip() ]
-
-        # go nuts!
-        catalog = []
-        for path_dir in self.path:
-            try:
-                entries = kpu.scan_directory(
-                    path_dir, self.pathext, kpu.ScanFlags.FILES,
-                    max_level=0)
-            except OSError as exc:
-                #self.dbg("Exception raised while scanning PATH:", exc)
-                continue
-
-            if self.should_terminate():
-                return []
-
-            for entry in entries:
-                entry_path = os.path.normpath(os.path.join(path_dir, entry))
-                catalog.append(self.create_item(
-                    category=kp.ItemCategory.FILE,
-                    label=os.path.basename(entry),
-                    short_desc="",
-                    target=entry_path,
-                    args_hint=kp.ItemArgsHint.ACCEPTED,
-                    hit_hint=kp.ItemHitHint.KEEPALL))
-
-        return catalog
-
-    def _catalog_startmenu(self):
-        KNOWN_FOLDERS = (
-            # label, desc, guid, scan recursively
-            ("CommonStartup", "Start Menu", "{82a5ea35-d9cd-47c5-9629-e15d2f714e6e}", True), # %ALLUSERSPROFILE%\Microsoft\Windows\Start Menu\Programs\StartUp
-            ("Startup", "Start Menu", "{b97d20bb-f46a-4c97-ba10-5e3608430854}", True), # %APPDATA%\Microsoft\Windows\Start Menu\Programs\StartUp
-            ("StartMenu", "Start Menu", "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}", True), # %APPDATA%\Microsoft\Windows\Start Menu
-            ("CommonStartMenu", "Start Menu", "{a4115719-d62e-491d-aa7c-e74b8be3b067}", True)) # %ALLUSERSPROFILE%\Microsoft\Windows\Start Menu
-
-        catalog = []
-        for kf in KNOWN_FOLDERS:
-            catalog.extend(self._catalog_knownfolder(kf[0], kf[1], kf[2], kf[3]))
-            if self.should_terminate():
-                return []
-        return catalog
-
-    def _catalog_desktop(self):
-        KNOWN_FOLDERS = (
-            # label, desc, guid, scan recursively
-            ("PublicDesktop", "Desktop", "{c4aa340d-f20f-4863-afef-f87ef2e6ba25}", False), # %PUBLIC%\Desktop
-            ("Desktop", "Desktop", "{b4bfcc3a-db2c-424c-b029-7fe99a87c641}", False)) # %USERPROFILE%\Desktop
-
-        catalog = []
-        for kf in KNOWN_FOLDERS:
-            catalog.extend(self._catalog_knownfolder(kf[0], kf[1], kf[2], kf[3]))
-            if self.should_terminate():
-                return []
-        return catalog
-
-    def _catalog_knownfolder(self, kf_label, kf_desc, kf_guid, recursive_scan):
-        try:
-            kf_path = kpu.shell_known_folder_path(kf_guid)
-        except OSError:
-            self.warn("Failed to get path of known folder {}".format(kf_label))
-            return []
-
-        if self.should_terminate():
-            return []
-
-        max_scan_level = -1 if recursive_scan else 0
-        try:
-            files = kpu.scan_directory(
-                kf_path, ('*'), flags=kpu.ScanFlags.FILES,
-                max_level=max_scan_level)
-        except IOError:
-            return []
-
-        if self.should_terminate():
-            return []
-
-        catalog = []
-        for relative in files:
-            f = os.path.normpath(os.path.join(kf_path, relative))
-            label = os.path.splitext(os.path.basename(f))[0]
-            desc = os.path.dirname(relative)
-
-            if not len(desc):
-                desc = os.path.basename(kf_path)
-            if not len(desc):
-                desc = label
-            desc = kf_desc + ": " + desc
-
-            catalog.append(self.create_item(
-                category=kp.ItemCategory.FILE,
-                label=label,
-                short_desc=desc,
-                target=f,
-                args_hint=kp.ItemArgsHint.ACCEPTED,
-                hit_hint=kp.ItemHitHint.KEEPALL))
-
-        return catalog
-
-    def _catalog_extrapaths(self):
-        catalog = []
-
-        for user_extra_path in self.extra_paths:
-            user_extra_path = user_extra_path.replace("/", os.sep)
-            has_trailing_sep = user_extra_path.endswith(os.sep)
-
-            if user_extra_path.startswith('::') and len(user_extra_path) >= 38:
-                (guid, tail) = (user_extra_path[2:].split(os.sep, maxsplit=1) + [None] * 2)[:2]
-                try:
-                    kf_path = kpu.shell_known_folder_path(guid)
-                    if tail is not None:
-                        user_extra_path = os.path.normpath(os.path.join(kf_path, tail))
-                    else:
-                        user_extra_path = kf_path
-                except OSError:
-                    self.warn("Failed to get path of known folder from setting \"{}\"".format(user_extra_path))
-                    continue
-            else:
-                user_extra_path = os.path.normpath(user_extra_path)
-
-            #user_extra_path = os.path.expandvars(user_extra_path) # not needed
-            if has_trailing_sep:
-                user_extra_path += os.sep
-
-            recursive_glob = "**" in user_extra_path
-            for globbed_path in glob.iglob(user_extra_path, recursive=recursive_glob):
-                if self.should_terminate():
-                    return []
-
-                files = []
-                if os.path.isdir(globbed_path):
-                    try:
-                        files = kpu.scan_directory(
-                            globbed_path, self.pathext, kpu.ScanFlags.FILES,
-                            max_level=0)
-                    except IOError as exc:
-                        self.warn(exc)
-                        continue
-                    files = [ os.path.join(globbed_path, f) for f in files ]
-                elif os.path.isfile(globbed_path):
-                    files = [globbed_path]
-                else:
-                    continue # duh?!
-
-                if self.should_terminate():
-                    return []
-
-                for f in files:
-                    catalog.append(self.create_item(
-                        category=kp.ItemCategory.FILE,
-                        label=os.path.basename(f),
-                        short_desc=f,
-                        target=f,
-                        args_hint=kp.ItemArgsHint.ACCEPTED,
-                        hit_hint=kp.ItemHitHint.KEEPALL))
-                    if len(catalog) % 100 == 0 and self.should_terminate():
-                        return []
-
-        return catalog
 
     def _customcmd_icon(self, cmd_lines):
         #for cmdline in cmd_lines:
