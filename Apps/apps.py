@@ -110,6 +110,8 @@ class _BasePlugin(kp.Plugin):
 
 
 class StartMenu(_BasePlugin):
+    """Scan files in user's Start Menu"""
+
     DEFAULT_SCAN_START_MENU = True
 
     scan_start_menu = DEFAULT_SCAN_START_MENU
@@ -162,6 +164,8 @@ class StartMenu(_BasePlugin):
 
 
 class Desktop(_BasePlugin):
+    """Scan files in user's Desktop"""
+
     DEFAULT_SCAN_DESKTOP = True
 
     scan_desktop = DEFAULT_SCAN_DESKTOP
@@ -212,6 +216,8 @@ class Desktop(_BasePlugin):
 
 
 class EnvPath(_BasePlugin):
+    """Scan executables in current PATH"""
+
     DEFAULT_SCAN_ENV_PATH = True
 
     scan_env_path = DEFAULT_SCAN_ENV_PATH
@@ -286,6 +292,8 @@ class EnvPath(_BasePlugin):
 
 
 class ExtraPaths(_BasePlugin):
+    """Scan files pointed at by the extra_paths setting"""
+
     pathext_str = ""
     pathext = []
     extra_paths = []
@@ -383,6 +391,10 @@ class ExtraPaths(_BasePlugin):
 
 
 class CustomCmds(_BasePlugin):
+    """
+    Launch any predefined command line, optionally with argument placeholders
+    """
+
     DEFAULT_ITEM_LABEL_FORMAT = "{cmd_name}"
     DEFAULT_HISTORY_KEEP = kp.ItemHitHint.NOARGS
 
