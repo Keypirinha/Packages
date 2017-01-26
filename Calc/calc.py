@@ -428,7 +428,13 @@ class Calc(kp.Plugin):
             if not self.ans.is_finite(): # nan or infinity
                 return str(self.ans)
             else:
-                do_trans = lambda s: str(s).translate(self.transmap_output).lower().rstrip("0").rstrip(self.decimal_separator)
+                def do_trans(val):
+                    val = str(val).translate(self.transmap_output).lower()
+                    if self.decimal_separator in val:
+                        val = val.rstrip("0").rstrip(self.decimal_separator)
+                        if not len(val):
+                            val = "0"
+                    return val
                 results = { # note: this is a set!
                     do_trans(self.ans.normalize()),
                     do_trans(self.ans),
@@ -536,7 +542,10 @@ class Calc(kp.Plugin):
             decimal.Decimal(value), places=self.rounding_precision, curr="",
             sep=self.thousand_separator, dp=self.decimal_separator,
             neg="-", trailneg="")
-        formatted_value = formatted_value.rstrip("0").rstrip(self.decimal_separator)
+        if self.decimal_separator in formatted_value:
+            formatted_value = formatted_value.rstrip("0").rstrip(self.decimal_separator)
+            if not len(formatted_value):
+                formatted_value = "0"
         return (formatted_value, )
 
     def _currencyfmt(self, value):
@@ -572,7 +581,10 @@ class Calc(kp.Plugin):
         formatted_value = self._currencyfmt_impl(
             value, places=self.currency_places,
             sep=self.currency_thousandsep, dp=self.currency_decsep)
-        formatted_value = formatted_value.rstrip("0").rstrip(self.currency_decsep)
+        if self.currency_decsep in formatted_value:
+            formatted_value = formatted_value.rstrip("0").rstrip(self.currency_decsep)
+            if not len(formatted_value):
+                formatted_value = "0"
         return (formatted_value, )
 
     def _currencyfmt_impl(
