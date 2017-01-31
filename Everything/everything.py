@@ -58,9 +58,9 @@ class Everything(kp.Plugin):
         initial_item = items_chain[0]
         current_item = items_chain[-1]
 
+        # support for pre-2.9 items
         if (current_item.category() == kp.ItemCategory.KEYWORD and
                 current_item.target() in ("search", "search_regex")):
-            # support for pre-2.9 items
             if not len(user_input):
                 return
             try:
@@ -76,6 +76,7 @@ class Everything(kp.Plugin):
                 self.err("Something bad happened while requesting Everything to perform your search.")
                 traceback.print_exc()
 
+        # handle "search" and "default_search" items defined in config
         elif current_item.category() == kp.ItemCategory.REFERENCE:
             if not initial_item.target() in self.searches.keys():
                 return
@@ -88,7 +89,7 @@ class Everything(kp.Plugin):
                 return
 
             # avoid flooding Everything with too much unnecessary queries in
-            # case user is still typing her search
+            # case user is still typing
             if len(user_input) > 0 and self.should_terminate(0.250):
                 return
 
@@ -105,6 +106,7 @@ class Everything(kp.Plugin):
                 self.err("Something bad happened while requesting Everything to perform your search.")
                 traceback.print_exc()
 
+        # handle file system browsing
         elif current_item.category() == kp.ItemCategory.FILE:
             if os.path.isdir(current_item.target()):
                 suggestions, match_method, sort_method = self._browse_dir(
@@ -212,7 +214,7 @@ class Everything(kp.Plugin):
             if not len(search_label):
                 self.warn('Ignoring empty search name (section "{}").'.format(section))
                 continue
-            forbidden_chars = (':;,/|\\')
+            forbidden_chars = ":;,/|\\"
             if any(c in forbidden_chars for c in search_label):
                 self.warn('Forbidden character(s) found in search name "{}". Forbidden characters list "{}"'.format(search_label, forbidden_chars))
                 continue
