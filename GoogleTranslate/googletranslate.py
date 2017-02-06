@@ -146,7 +146,7 @@ class GoogleTranslate(kp.Plugin):
         if item.category() != self.ITEMCAT_TRANSLATE:
             return
 
-        # browse
+        # browse or copy url
         if action and action.name() in (self.ACTION_BROWSE,
                                         self.ACTION_BROWSE_PRIVATE,
                                         self.ACTION_COPY_URL):
