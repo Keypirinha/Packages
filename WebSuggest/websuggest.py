@@ -23,6 +23,9 @@ class WebSuggestionsProvider():
         "api_base", "api_method", "api_args", "api_headers", "api_parser",
         "browse_base", "browse_args")
 
+    # note: some definitions of providers can be used from Firefox's
+    # searchplugins registry at resource://search-plugins/
+
     def __init__(self, name, label):
         self.name = name
         self.label = label
