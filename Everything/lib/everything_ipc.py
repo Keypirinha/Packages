@@ -132,7 +132,7 @@ class List():
 
 def _wndproc(hwnd, msg, wparam, lparam):
     if msg == kpwt.WM_COPYDATA:
-        expected_query_id = kpwt.user32.GetWindowLongPtrW(hwnd, kpwt.GWLP_USERDATA)
+        expected_query_id = kpwt.GetWindowLongPtr(hwnd, kpwt.GWLP_USERDATA)
         cds = ct.cast(lparam, ct.POINTER(kpwt.COPYDATASTRUCT)).contents
         if cds.dwData == expected_query_id:
             res_buffer = ct.create_string_buffer(cds.cbData)
