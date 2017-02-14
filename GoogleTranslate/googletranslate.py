@@ -25,6 +25,8 @@ class GoogleTranslate(kp.Plugin):
         ("oe", "UTF-8"),
         ("otf", 1),
         ("dt", "t")) # bd, ex, ld, md, qca, rw, rm, ss, t, at
+    # Example:
+    # https://translate.google.com/translate_a/single?client=gtx&hl=en&sl=auto&ssel=0&tl=fr&tsel=0&q=about+right&ie=UTF-8&oe=UTF-8&otf=0&dt=at
     API_USER_AGENT = "Mozilla/5.0"
     BROWSE_URL = "https://translate.google.com/#{lang_in}/{lang_out}/{term}"
 
