@@ -23,8 +23,8 @@ class WebSuggestionsProvider():
         "api_base", "api_method", "api_args", "api_headers", "api_parser",
         "browse_base", "browse_args")
 
-    # note: some definitions of providers can be used from Firefox's
-    # searchplugins registry at resource://search-plugins/
+    # note: some definitions of providers can be found in Firefox's
+    # "searchplugins" registry at resource://search-plugins/
 
     def __init__(self, name, label):
         self.name = name
@@ -316,6 +316,8 @@ class WebSuggest(kp.Plugin):
 
         try:
             provider_suggestions = profile['provider'].query(self, user_input)
+            if self.should_terminate():
+                return
         except urllib.error.HTTPError as exc:
             suggestions.append(self.create_error_item(
                 label=user_input, short_desc=str(exc)))
