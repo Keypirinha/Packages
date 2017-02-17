@@ -20,18 +20,16 @@ class GoogleTranslate(kp.Plugin):
         ("ssel", 0),
         ("tl", "LANGOUT"), # placeholder
         ("tsel", 0),
-        ("q", "TERM"), # placeholder
+        ("q", "TERMS"), # placeholder
         ("ie", "UTF-8"),
         ("oe", "UTF-8"),
         ("otf", 1),
-        ("dt", "t")) # bd, ex, ld, md, qca, rw, rm, ss, t, at
-    # Example:
-    # https://translate.google.com/translate_a/single?client=gtx&hl=en&sl=auto&ssel=0&tl=fr&tsel=0&q=about+right&ie=UTF-8&oe=UTF-8&otf=0&dt=at
+        ("dt", "at")) # bd, ex, ld, md, qca, rw, rm, ss, t, at
     API_USER_AGENT = "Mozilla/5.0"
-    BROWSE_URL = "https://translate.google.com/#{lang_in}/{lang_out}/{term}"
+    BROWSE_URL = "https://translate.google.com/#{lang_in}/{lang_out}/{terms}"
 
     ITEMCAT_TRANSLATE = kp.ItemCategory.USER_BASE + 1
-    ITEMCAT_TRANSLATE_TARGET = "translate"
+    ITEMCAT_RESULT = kp.ItemCategory.USER_BASE + 2
 
     ITEM_ARGS_SEP = ":"
 
@@ -94,36 +92,32 @@ class GoogleTranslate(kp.Plugin):
         if not items_chain or items_chain[-1].category() != self.ITEMCAT_TRANSLATE:
             return
         current_item = items_chain[-1]
-
-        # prepare query args with default values
-        query = {
-            'lang_in': self.default_lang_in,
-            'lang_out': self.default_lang_out,
-            'term': ""}
         suggestions = []
 
         # read query args from current item, if any
         # then override item's query args with user_input if needed
-        self._parse_and_merge_input(query, current_item, user_input)
+        query = self._parse_and_merge_input(current_item, user_input)
 
         # query google translate if needed
-        if query['lang_in'] and query['lang_out'] and len(query['term']):
+        if query['lang_in'] and query['lang_out'] and len(query['terms']):
             # avoid doing too much network requests in case user is still typing
             if self.should_terminate(0.25):
                 return
 
-            response = None
+            results = []
             try:
-                # get translated version of term
+                # get translated version of terms
                 opener = kpnet.build_urllib_opener()
                 opener.addheaders = [("User-agent", self.API_USER_AGENT)]
                 url = self._build_api_url(query['lang_in'], query['lang_out'],
-                                          query['term'])
+                                          query['terms'])
                 with opener.open(url) as conn:
                     response = conn.read()
+                if self.should_terminate():
+                    return
 
                 # parse response from the api
-                response = self._parse_api_response(response, query['lang_in'])
+                results = self._parse_api_response(response, query['lang_in'])
             except urllib.error.HTTPError as exc:
                 suggestions.append(self.create_error_item(
                     label=user_input, short_desc=str(exc)))
@@ -133,19 +127,19 @@ class GoogleTranslate(kp.Plugin):
                 traceback.print_exc()
 
             # create a suggestion from api's response, if any
-            if response:
-                suggestions.append(self._create_translate_item(
-                    lang_in=response['lang_in'],
+            for res in results:
+                suggestions.append(self._create_result_item(
+                    lang_in=res['lang_in'],
                     lang_out=query['lang_out'],
-                    search_term=query['term'],
-                    search_result=response['result']))
+                    search_terms=query['terms'],
+                    search_result=res['result']))
 
         # push suggestions if any
         if suggestions:
             self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
     def on_execute(self, item, action):
-        if item.category() != self.ITEMCAT_TRANSLATE:
+        if item.category() != self.ITEMCAT_RESULT:
             return
 
         # browse or copy url
@@ -153,13 +147,9 @@ class GoogleTranslate(kp.Plugin):
                                         self.ACTION_BROWSE_PRIVATE,
                                         self.ACTION_COPY_URL):
             # build the url and its arguments
-            query = {
-                'lang_in': self.default_lang_in,
-                'lang_out': self.default_lang_out,
-                'term': ""}
-            self._parse_and_merge_input(query, item)
+            query = self._parse_and_merge_input(item)
             url = self._build_browse_url(query['lang_in'], query['lang_out'],
-                                         query['term'])
+                                         query['terms'])
 
             # copy url
             if action.name() == self.ACTION_COPY_URL:
@@ -297,49 +287,64 @@ class GoogleTranslate(kp.Plugin):
         return custom_items
 
     def _parse_api_response(self, response, query_lang_in):
-        # expected format:
-        #   [[["bonjour","hello",,,1]],,"en",,,,1,,[["en"],,[1],["en"]]]
+        # example:
+        # * https://translate.google.com/translate_a/single?client=gtx&hl=en&sl=auto&ssel=0&tl=en&tsel=0&q=meilleur+definition&ie=UTF-8&oe=UTF-8&otf=0&dt=t
+        #   [[["Best definition","meilleur definition",,,3]],,"fr",,,,0.34457824,,[["fr"],,[0.34457824],["fr"]]]
+        # * https://translate.google.com/translate_a/single?client=gtx&hl=en&sl=auto&ssel=0&tl=en&tsel=0&q=meilleur+definition&ie=UTF-8&oe=UTF-8&otf=0&dt=at
+        #   [,,"fr",,,[["meilleur definition",,[["Best definition",0,true,false],["better definition",0,true,false]],[[0,19]],"meilleur definition",0,0]],0.34457824,,[["fr"],,[0.34457824],["fr"]]]
 
         response = response.decode(encoding="utf-8", errors="strict")
         while ",," in response:
             response = response.replace(",,", ",null,")
+        while "[," in response:
+            response = response.replace("[,", "[null,")
 
         json_root = json.loads(response)
-
         translated = []
-        for json_node in json_root[0]:
-            translated.append(json_node[0].strip())
-        translated = " ".join(translated)
 
+        #for json_node in json_root[0]:
+        #    translated.append(json_node[0].strip())
+        #translated = " ".join(translated)
+        #lang_in = json_root[2]
+
+        # note: json_root[5] may be None when there is no translation to be done
+        # (i.e. target lang is "en" and text to translate is already in English)
         lang_in = json_root[2]
+        if json_root[5] is not None:
+            for json_node in json_root[5][0][2]:
+                translated.append(json_node[0].strip())
 
         # in case google's api support a new language that is not in our local
         # database yet, this ensures we don't create items with an unknown
         # lang_in value (catalog file, history file, ...)
         lang_in = self._match_lang_code("in", lang_in, fallback=query_lang_in)
 
-        return {'result': translated, 'lang_in': lang_in}
+        #return {'result': translated, 'lang_in': lang_in}
+        return [{'result': res, 'lang_in': lang_in} for res in translated]
 
-    def _parse_and_merge_input(self, query_ref, item, user_input=None):
+    def _parse_and_merge_input(self, item, user_input=None):
+        query = {
+            'lang_in': self.default_lang_in,
+            'lang_out': self.default_lang_out,
+            'terms': ""}
+
         # parse item's target
-        # * raw args format: [lang_in]:[lang_out]
-        # * value built by the _create_translate_item() method
-        if item and item.target() == self.ITEMCAT_TRANSLATE_TARGET:
-            item_props = item.raw_args().split(self.ITEM_ARGS_SEP)
+        if item and item.category() == self.ITEMCAT_TRANSLATE:
+            item_props = item.target().split(self.ITEM_ARGS_SEP)
 
             # lang_in
             if len(item_props) >= 1:
-                query_ref['lang_in'] = self._match_lang_code(
-                    "in", item_props[0], fallback=query_ref['lang_in'])
+                query['lang_in'] = self._match_lang_code(
+                    "in", item_props[0], fallback=query['lang_in'])
 
             # lang_out
             if len(item_props) >= 2:
-                query_ref['lang_out'] = self._match_lang_code(
-                    "out", item_props[1], fallback=query_ref['lang_out'])
+                query['lang_out'] = self._match_lang_code(
+                    "out", item_props[1], fallback=query['lang_out'])
 
-            # search term
-            if len(item.displayed_args()):
-                query_ref['term'] = item.displayed_args()
+            # search terms
+            if len(item.raw_args()):
+                query['terms'] = item.raw_args()
 
         # parse user input
         # * supported formats:
@@ -350,21 +355,21 @@ class GoogleTranslate(kp.Plugin):
         if user_input:
             user_input = user_input.lstrip()
 
-            # match: <term> [[lang_in]:[lang_out]]
+            # match: <terms> [[lang_in]:[lang_out]]
             m = re.match(
-                (r"^(?P<term>.*)\s+" +
+                (r"^(?P<terms>.*)\s+" +
                     r"(?P<lang_in>[a-zA-Z\-]+)?" +
                     re.escape(self.ITEM_ARGS_SEP) +
                     r"(?P<lang_out>[a-zA-Z\-]+)?$"),
                 user_input)
 
-            # match: [[lang_in]:[lang_out]] <term>
+            # match: [[lang_in]:[lang_out]] <terms>
             if not m:
                 m = re.match(
                     (r"^(?P<lang_in>[a-zA-Z\-]+)?" +
                         re.escape(self.ITEM_ARGS_SEP) +
                         r"(?P<lang_out>[a-zA-Z\-]+)?" +
-                        r"\s+(?P<term>.*)$"),
+                        r"\s+(?P<terms>.*)$"),
                     user_input)
 
             if m:
@@ -373,13 +378,15 @@ class GoogleTranslate(kp.Plugin):
                     lang_out = self._match_lang_code("out", m.group("lang_out"))
                     if lang_in or lang_out:
                         if lang_in:
-                            query_ref['lang_in'] = lang_in
+                            query['lang_in'] = lang_in
                         if lang_out:
-                            query_ref['lang_out'] = lang_out
-                        query_ref['term'] = m.group("term").rstrip()
+                            query['lang_out'] = lang_out
+                        query['terms'] = m.group("terms").rstrip()
                         return
 
-            query_ref['term'] = user_input.rstrip()
+            query['terms'] = user_input.rstrip()
+
+        return query
 
     def _lang_name(self, inout, lang_code):
         match_code = self._match_lang_code(inout, lang_code)
@@ -404,76 +411,81 @@ class GoogleTranslate(kp.Plugin):
                     return code
         return fallback
 
-    def _create_translate_item(self, label=None, lang_in=None, lang_out=None,
-                               search_term=None, search_result=None):
-        # args sanitizing
+    def _create_translate_item(self, label=None, lang_in=None, lang_out=None):
         if label:
             label = label.strip()
         if not label:
             label = self.default_item_label
+
         if lang_in:
             lang_in = self._match_lang_code("in", lang_in)
+        if not lang_in:
+            lang_in = self.default_lang_in
+
         if lang_out:
             lang_out = self._match_lang_code("out", lang_out)
-        if search_term:
-            search_term = search_term.strip()
-            if not len(search_term):
-                search_term = None
-        if search_result:
-            search_result = search_result.strip()
-            if not len(search_result):
-                search_result = None
-
-        # prepare short_desc property
-        short_desc = "Google Translate"
-        if lang_in or lang_out:
-            short_desc += " ["
-            if lang_in:
-                short_desc += lang_in
-            short_desc += self.ITEM_ARGS_SEP
-            if lang_out:
-                short_desc += lang_out
-            short_desc += "]"
-        if search_term and search_result:
-            short_desc += ": " + search_result
+        if not lang_out:
+            lang_out = self.default_lang_out
 
         item = self.create_item(
             category=self.ITEMCAT_TRANSLATE,
             label=label,
-            short_desc=short_desc,
-            target=self.ITEMCAT_TRANSLATE_TARGET,
+            short_desc="Google Translate [{}{}{}]".format(
+                                        lang_in, self.ITEM_ARGS_SEP, lang_out),
+            target=lang_in + self.ITEM_ARGS_SEP + lang_out,
             args_hint=kp.ItemArgsHint.REQUIRED,
             hit_hint=kp.ItemHitHint.NOARGS)
 
-        # query args and result
-        if lang_in or lang_out or search_term:
-            # prepare raw args
-            # * raw args format: [lang_in]:[lang_out]
-            # * CAUTION: _parse_and_merge_input() relies on this
-            raw_args = (
-                (lang_in if lang_in else "") +
-                self.ITEM_ARGS_SEP +
-                (lang_out if lang_out else ""))
-            displayed_args = search_term if search_term is not None else ""
-            item.set_args(raw_args, displayed_args)
+        return item
 
-        # result
-        if search_term and search_result:
-            item.set_data_bag(search_result)
+    def _create_result_item(self, lang_in, lang_out,
+                            search_terms, search_result):
+        if lang_in:
+            lang_in = self._match_lang_code("in", lang_in)
+        if not lang_in:
+            lang_in = self.default_lang_in
+
+        if lang_out:
+            lang_out = self._match_lang_code("out", lang_out)
+        if not lang_out:
+            lang_out = self.default_lang_out
+
+        if search_terms:
+            search_terms = search_terms.strip()
+            if not len(search_terms):
+                search_terms = None
+
+        short_desc = "Google Translate [{}{}{}]".format(
+            lang_in, self.ITEM_ARGS_SEP, lang_out)
+        if search_terms:
+            short_desc += ": " + search_terms
+
+        item = self.create_item(
+            category=self.ITEMCAT_RESULT,
+            label=search_result if search_result else "",
+            short_desc=short_desc,
+            target=search_result if search_result else "",
+            args_hint=kp.ItemArgsHint.REQUIRED,
+            hit_hint=kp.ItemHitHint.IGNORE)
+
+        data_bag = lang_in + self.ITEM_ARGS_SEP + lang_out + self.ITEM_ARGS_SEP
+        if search_terms:
+            data_bag += search_terms
+        item.set_data_bag(data_bag)
 
         return item
 
-    def _build_api_url(self, lang_in, lang_out, term):
+    def _build_api_url(self, lang_in, lang_out, terms):
         url = self.API_URL + "?" + urllib.parse.urlencode(self.API_QUERY)
         url = url.replace("LANGIN", urllib.parse.quote_plus(lang_in))
         url = url.replace("LANGOUT", urllib.parse.quote_plus(lang_out))
-        return url.replace("TERM", urllib.parse.quote_plus(term))
+        return url.replace("TERMS", urllib.parse.quote_plus(terms))
 
-    def _build_browse_url(self, lang_in, lang_out, term):
+    def _build_browse_url(self, lang_in, lang_out, terms):
         return self.BROWSE_URL.format(
             lang_in=urllib.parse.quote(lang_in),
             lang_out=urllib.parse.quote(lang_out),
-            term=urllib.parse.quote(term))
+            terms=urllib.parse.quote(terms))
 
     def _read_lang_databases(self):
         self.lang = {}
