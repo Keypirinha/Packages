@@ -382,7 +382,6 @@ class GoogleTranslate(kp.Plugin):
                         if lang_out:
                             query['lang_out'] = lang_out
                         query['terms'] = m.group("terms").rstrip()
-                        return
 
             query['terms'] = user_input.rstrip()
 
