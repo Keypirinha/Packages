@@ -354,6 +354,7 @@ class GoogleTranslate(kp.Plugin):
         #   both ends, the one at the right end prevails
         if user_input:
             user_input = user_input.lstrip()
+            query['terms'] = user_input.rstrip()
 
             # match: <terms> [[lang_in]:[lang_out]]
             m = re.match(
@@ -382,8 +383,6 @@ class GoogleTranslate(kp.Plugin):
                         if lang_out:
                             query['lang_out'] = lang_out
                         query['terms'] = m.group("terms").rstrip()
-
-            query['terms'] = user_input.rstrip()
 
         return query
 
