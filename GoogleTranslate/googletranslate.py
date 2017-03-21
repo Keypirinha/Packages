@@ -166,7 +166,7 @@ class GoogleTranslate(kp.Plugin):
 
         # default action: copy result (ACTION_COPY_RESULT)
         else:
-            kpu.set_clipboard(item.data_bag())
+            kpu.set_clipboard(item.target())
 
     def on_events(self, flags):
         if flags & (kp.Events.APPCONFIG | kp.Events.PACKCONFIG |
