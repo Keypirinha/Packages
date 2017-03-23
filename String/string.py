@@ -264,6 +264,7 @@ class String(kp.Plugin):
     def __init__(self):
         super().__init__()
 
+    def on_start(self):
         functors_list = [
             _Functor_ArgQuoteUnix(),
             _Functor_ArgQuoteWin(),
