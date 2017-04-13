@@ -7,26 +7,112 @@ import io
 import ast
 import tokenize
 import math
-import decimal
 import random
 import traceback
+from .lib.number import Number
 from .lib import simpleeval
 
-class Number2Decimal(): # Python rocks
+def _safe_abs(x):
+    return Number(x).__abs__()
+
+def _safe_bin(x):
+    return bin(Number(x).safe_int())
+
+def _safe_bool(x=False):
+    return Number(x).__bool__()
+
+def _safe_chr(i):
+    return chr(Number(i).safe_int())
+
+def _safe_divmod(a, b):
+    return Number(a).__divmod__(b)
+
+def _safe_float(x=None):
+    return Number(0) if x is None else Number(x).__float__()
+
+def _safe_hex(x):
+    return hex(Number(x).safe_int())
+
+def _safe_int(x=0, base=10):
+    try:
+        return int(x, base)
+    except:
+        return Number(x).__int__()
+
+def _safe_min(*args, **kwargs):
+    if len(args) == 1:
+        converted_args = [Number(x) for x in args[0]]
+    else:
+        converted_args = [Number(x) for x in args]
+    return min(converted_args, **kwargs)
+
+def _safe_max(*args, **kwargs):
+    if len(args) == 1:
+        converted_args = [Number(x) for x in args[0]]
+    else:
+        converted_args = [Number(x) for x in args]
+    return max(converted_args, **kwargs)
+
+def _safe_oct(x):
+    return oct(Number(x).safe_int())
+
+def _safe_ord(x):
+    if isinstance(x, str):
+        return ord(x)
+    else:
+        return ord(str(Number(x)))
+
+def _safe_pow(x, y, z=None):
+    return Number(x).__pow__(y, z)
+
+def _safe_round(x, ndigits=None):
+    return Number(x).__round__(ndigits)
+
+
+def _safe_custom_rand(top):
+    return int(random() * Number(top).safe_int())
+
+def _safe_custom_randf(a, b):
+    try:
+        safe_a = Number(a).safe_int()
+    except:
+        safe_a = Number(a).__float__()
+
+    try:
+        safe_b = Number(b).safe_int()
+    except:
+        safe_b = Number(b).__float__()
+
+    return random.uniform(safe_a, safe_b)
+
+def _safe_custom_randi(a, b):
+    return random.randint(Number(a).safe_int(), Number(b).safe_int())
+
+
+def _safe_math_exp(x):
+    return Number(x).exp()
+
+def _safe_math_gcd(a, b):
+    safe_a = Number(a)
+    safe_b = Number(b)
+    if safe_a == 0 and safe_b == 0:
+        return 0
+    else:
+        return math.gcd(safe_a.__float__(), safe_b.__float__())
+
+def _safe_math_sqrt(x):
+    return Number(x).sqrt()
+
+class _safe_mathfunc_args2float():
+    __slots__ = ('_func')
+
     def __init__(self, func):
-        self.func = func
+        self._func = func
+
     def __call__(self, *args, **kwargs):
-        result = self.func(*args, **kwargs)
-        if isinstance(result, int):
-            return decimal.Decimal(result)
-        elif isinstance(result, float):
-            return decimal.Decimal(result)
-        elif isinstance(result, str) and "." in result:
-            return decimal.Decimal(result)
-        elif isinstance(result, bytes) and b'.' in result:
-            return decimal.Decimal(result.decode("utf-8"))
-        else:
-            return result
+        converted_args = [Number(a).__float__() for a in args]
+        return self._func(*converted_args, **kwargs)
+
 
 class Calc(kp.Plugin):
     """
@@ -47,62 +133,62 @@ class Calc(kp.Plugin):
     MATH_OPERATORS = simpleeval.DEFAULT_OPERATORS
 
     MATH_CONSTANTS = {
-        'pi': decimal.Decimal(math.pi),
-        'e': decimal.Decimal(math.e),
-        'inf': decimal.Decimal(math.inf),
-        'nan': decimal.Decimal(math.nan),
+        'pi': math.pi,
+        'e': math.e,
+        'inf': math.inf,
+        'nan': math.nan,
         'ans': 0, # replaced by self.ans at runtime
     }
 
     MATH_FUNCTIONS = {
-        'abs': Number2Decimal(abs),
-        'bin': bin,
-        'bool': bool,
-        'chr': chr,
-        'divmod': divmod,
-        'float': Number2Decimal(float),
-        'hex': hex,
-        'int': Number2Decimal(int),
-        'len': Number2Decimal(len),
-        'min': Number2Decimal(min),
-        'max': Number2Decimal(max),
-        'oct': oct,
-        'ord': ord,
-        'pow': Number2Decimal(pow),
-        'round': Number2Decimal(round),
-        'str': Number2Decimal(str),
+        'abs': _safe_abs,
+        'bin': _safe_bin,
+        'bool': _safe_bool,
+        'chr': _safe_chr,
+        'divmod': _safe_divmod,
+        'float': _safe_float,
+        'hex': _safe_hex,
+        'int': _safe_int,
+        'len': len,
+        'min': _safe_min,
+        'max': _safe_max,
+        'oct': _safe_oct,
+        'ord': _safe_ord,
+        'pow': _safe_pow,
+        'round': _safe_round,
+        'str': str,
 
-        'rand': Number2Decimal(simpleeval.random_int),
-        'rand1': Number2Decimal(random.random), # returns [0.0, 1.0)
-        'randf': Number2Decimal(random.uniform), # random.uniform(a, b): Return a random floating point number N such that a <= N <= b for a <= b and b <= N <= a for b < a
-        'randi': Number2Decimal(random.randint), # returns N where: a <= N <= b
+        'rand': _safe_custom_rand,
+        'rand1': random.random, # returns [0.0, 1.0)
+        'randf': _safe_custom_randf, # random.uniform(a, b): Return a random floating point number N such that a <= N <= b for a <= b and b <= N <= a for b < a
+        'randi': _safe_custom_randi, # returns N where: a <= N <= b
 
-        'acos': Number2Decimal(math.acos),
-        'acosh': Number2Decimal(math.acosh),
-        'asin': Number2Decimal(math.asin),
-        'asinh': Number2Decimal(math.asinh),
-        'atan': Number2Decimal(math.atan),
-        'atan2': Number2Decimal(math.atan2),
-        'atanh': Number2Decimal(math.atanh),
-        'ceil': Number2Decimal(math.ceil),
-        'cos': Number2Decimal(math.cos),
-        'cosh': Number2Decimal(math.cosh),
-        'deg': Number2Decimal(math.degrees),
-        'exp': Number2Decimal(math.exp),
-        'factor': Number2Decimal(math.factorial),
-        'floor': Number2Decimal(math.floor),
-        'gcd': Number2Decimal(math.gcd),
-        'hypot': Number2Decimal(math.hypot),
-        'log': Number2Decimal(math.log),
-        'rad': Number2Decimal(math.radians),
-        'sin': Number2Decimal(math.sin),
-        'sinh': Number2Decimal(math.sinh),
-        'sqrt': Number2Decimal(math.sqrt),
-        'tan': Number2Decimal(math.tan),
-        'tanh': Number2Decimal(math.tanh),
+        'acos': _safe_mathfunc_args2float(math.acos),
+        'acosh': _safe_mathfunc_args2float(math.acosh),
+        'asin': _safe_mathfunc_args2float(math.asin),
+        'asinh': _safe_mathfunc_args2float(math.asinh),
+        'atan': _safe_mathfunc_args2float(math.atan),
+        'atan2': _safe_mathfunc_args2float(math.atan2),
+        'atanh': _safe_mathfunc_args2float(math.atanh),
+        'ceil': _safe_mathfunc_args2float(math.ceil),
+        'cos': _safe_mathfunc_args2float(math.cos),
+        'cosh': _safe_mathfunc_args2float(math.cosh),
+        'deg': _safe_mathfunc_args2float(math.degrees),
+        'exp': _safe_math_exp,
+        'factor': _safe_mathfunc_args2float(math.factorial),
+        'floor': _safe_mathfunc_args2float(math.floor),
+        'gcd': _safe_math_gcd,
+        'hypot': _safe_mathfunc_args2float(math.hypot),
+        'log': _safe_mathfunc_args2float(math.log),
+        'rad': _safe_mathfunc_args2float(math.radians),
+        'sin': _safe_mathfunc_args2float(math.sin),
+        'sinh': _safe_mathfunc_args2float(math.sinh),
+        'sqrt': _safe_math_sqrt,
+        'tan': _safe_mathfunc_args2float(math.tan),
+        'tanh': _safe_mathfunc_args2float(math.tanh),
 
         # undocumented
-        'Decimal': decimal.Decimal, # see _retokenize()
+        'Number': Number, # see _retokenize()
     }
 
     TOKENSMAP_OPERATORS = {
@@ -119,26 +205,26 @@ class Calc(kp.Plugin):
     TOKENSMAP_NUMBER_SUFFIXES = {
         # https://en.wikipedia.org/wiki/Metric_prefix
         # https://en.wikipedia.org/wiki/Hecto-
-        'y':  lambda n: decimal.Decimal(n) / 1000 ** 8, # yocto
-        'z':  lambda n: decimal.Decimal(n) / 1000 ** 7, # zepto
-        'a':  lambda n: decimal.Decimal(n) / 1000 ** 6, # atto
-        'f':  lambda n: decimal.Decimal(n) / 1000 ** 5, # femto
-        'p':  lambda n: decimal.Decimal(n) / 1000 ** 4, # pico
-        'n':  lambda n: decimal.Decimal(n) / 1000 ** 3, # nano
-        'u':  lambda n: decimal.Decimal(n) / 1000 ** 2, # micro
-        'm':  lambda n: decimal.Decimal(n) / 1000,      # milli
-        'c':  lambda n: decimal.Decimal(n) / 100,       # centi
-        'd':  lambda n: decimal.Decimal(n) / 10,        # deci
-        'da': lambda n:                  n * 10,        # deca
-        'h':  lambda n:                  n * 100,       # hecto
-        'k':  lambda n:                  n * 1000,      # Kilo
-        'M':  lambda n:                  n * 1000 ** 2, # Mega
-        'G':  lambda n:                  n * 1000 ** 3, # Giga
-        'T':  lambda n:                  n * 1000 ** 4, # Tera
-        'P':  lambda n:                  n * 1000 ** 5, # Peta
-        'E':  lambda n:                  n * 1000 ** 6, # Exa
-        'Z':  lambda n:                  n * 1000 ** 7, # Zetta
-        'Y':  lambda n:                  n * 1000 ** 8, # Yotta
+        'y':  lambda n: n / 1000 ** 8, # yocto
+        'z':  lambda n: n / 1000 ** 7, # zepto
+        'a':  lambda n: n / 1000 ** 6, # atto
+        'f':  lambda n: n / 1000 ** 5, # femto
+        'p':  lambda n: n / 1000 ** 4, # pico
+        'n':  lambda n: n / 1000 ** 3, # nano
+        'u':  lambda n: n / 1000 ** 2, # micro
+        'm':  lambda n: n / 1000,      # milli
+        'c':  lambda n: n / 100,       # centi
+        'd':  lambda n: n / 10,        # deci
+        'da': lambda n: n * 10,        # deca
+        'h':  lambda n: n * 100,       # hecto
+        'k':  lambda n: n * 1000,      # Kilo
+        'M':  lambda n: n * 1000 ** 2, # Mega
+        'G':  lambda n: n * 1000 ** 3, # Giga
+        'T':  lambda n: n * 1000 ** 4, # Tera
+        'P':  lambda n: n * 1000 ** 5, # Peta
+        'E':  lambda n: n * 1000 ** 6, # Exa
+        'Z':  lambda n: n * 1000 ** 7, # Zetta
+        'Y':  lambda n: n * 1000 ** 8, # Yotta
 
         # https://en.wikipedia.org/wiki/Orders_of_magnitude_(data)
         # https://en.wikipedia.org/wiki/Kibibyte
@@ -420,11 +506,11 @@ class Calc(kp.Plugin):
         elif isinstance(self.ans, int):
             return (self.ans, hex(self.ans), bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
         elif isinstance(self.ans, float):
-            self.ans = decimal.Decimal(self.ans)
+            self.ans = Number(self.ans)
         elif isinstance(self.ans, complex):
             return str(self.ans)
 
-        if isinstance(self.ans, decimal.Decimal):
+        if isinstance(self.ans, Number):
             if not self.ans.is_finite(): # nan or infinity
                 return str(self.ans)
             else:
@@ -439,12 +525,22 @@ class Calc(kp.Plugin):
                     do_trans(self.ans.normalize()),
                     do_trans(self.ans),
                     do_trans(self.ans.to_eng_string())}
+
                 if self.rounding_precision is not None:
-                    q = decimal.Decimal(10) ** -self.rounding_precision
+                    q = Number(10) ** -self.rounding_precision
                     v = do_trans(self.ans.quantize(q))
                     results.add(v)
                 results = list(results)
                 results.sort(key=len)
+
+                try:
+                    intval = self.ans.safe_int()
+                    for v in (str(intval), hex(intval), bin(intval), oct(intval)):
+                        if v not in results:
+                            results.append(v)
+                except:
+                    pass
+
                 for v in self._numberfmt(self.ans):
                     results.append(v)
                 results += list(self._currencyfmt(self.ans))
@@ -455,11 +551,11 @@ class Calc(kp.Plugin):
 
     def _retokenize(self, expr):
         def _tokenize_number(dest, nstr, force_decimal):
-            # convert floats to Decimal only if nstr is a float or if we've
+            # convert floats to Number only if nstr is a float or if we've
             # had a float already in the expression (Python really rocks)
             if force_decimal or "." in nstr:
                 dest.extend([
-                    (tokenize.NAME, "Decimal"),
+                    (tokenize.NAME, "Number"),
                     (tokenize.NAME, "("),
                     (tokenize.STRING, repr(nstr)),
                     (tokenize.NAME, ")")])
@@ -534,12 +630,12 @@ class Calc(kp.Plugin):
         return tokenize.untokenize(trans_tokens).decode('utf-8')
 
     def _numberfmt(self, value):
-        if not isinstance(value, (int, float, decimal.Decimal)):
+        if not isinstance(value, (int, float, Number)):
             return ()
         if -999 <= value <= 999:
             return ()
         formatted_value = self._currencyfmt_impl(
-            decimal.Decimal(value), places=self.rounding_precision, curr="",
+            Number(value), places=self.rounding_precision, curr="",
             sep=self.thousand_separator, dp=self.decimal_separator,
             neg="-", trailneg="")
         if self.decimal_separator in formatted_value:
@@ -551,11 +647,11 @@ class Calc(kp.Plugin):
     def _currencyfmt(self, value):
         if not self.currency_enabled:
             return ()
-        if not isinstance(value, (float, decimal.Decimal)):
+        if not isinstance(value, (float, Number)):
             if self.currency_float_only:
                 return ()
 
-        value = decimal.Decimal(value)
+        value = Number(value)
 
         if self.currency_from_system:
             value_to_api = str(float(value))
@@ -615,7 +711,7 @@ class Calc(kp.Plugin):
         >>> moneyfmt(Decimal('-0.02'), neg='<', trailneg='>')
         '<0.02>'
         """
-        q = decimal.Decimal(10) ** -places # 2 places --> '0.01'
+        q = Number(10) ** -places # 2 places --> '0.01'
         sign, digits, exp = value.quantize(q).as_tuple()
         result = []
         digits = list(map(str, digits))
