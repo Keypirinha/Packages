@@ -55,7 +55,8 @@ class FileBrowser(kp.Plugin):
             self.set_suggestions(suggestions, match_method, sort_method)
 
         # initial search, user_input is an absolute path
-        elif not items_chain and os.path.isabs(user_input):
+        elif not items_chain and os.path.isabs(os.path.expandvars(user_input)):
+            user_input = os.path.expandvars(user_input)
             if user_input.endswith(os.sep):
                 # path is expected to be a directory
                 suggestions, match_method, sort_method = self._browse_dir(user_input)
@@ -118,7 +119,7 @@ class FileBrowser(kp.Plugin):
             if dir_target is not None:
                 suggestions, match_method, sort_method = self._browse_dir(
                                     dir_target, check_base_dir=False,
-                                    search_terms=user_input)
+                                    search_terms=os.path.expandvars(user_input))
                 self.set_suggestions(suggestions, match_method, sort_method)
             elif exists:
                 clone = current_item.clone()
