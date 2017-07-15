@@ -299,7 +299,7 @@ class Client():
 
         # assign the current query id if needed
         if current_query_id is not None:
-            kpwt.user32.SetWindowLongPtrW(hwnd, kpwt.GWLP_USERDATA, current_query_id)
+            kpwt.SetWindowLongPtr(hwnd, kpwt.GWLP_USERDATA, current_query_id)
 
         # allow the WM_COPYDATA message to be received
         try:
