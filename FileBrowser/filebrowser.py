@@ -54,8 +54,15 @@ class FileBrowser(kp.Plugin):
             suggestions, match_method, sort_method = self._browse_dir(user_input + os.sep)
             self.set_suggestions(suggestions, match_method, sort_method)
 
-        # initial search, user_input is an absolute path
-        elif not items_chain and os.path.isabs(os.path.expandvars(user_input)):
+        # initial search, user_input is an absolute path, or a UNC
+        # Notes:
+        #   os.path.isabs("\\\\server\\share") == False
+        #   os.path.ismount("\\\\server\\share") == True
+        #   os.path.isabs("\\\\server\\share\\file") == True
+        #   os.path.ismount("\\\\server\\share\\file") == False
+        elif not items_chain and (
+                os.path.isabs(os.path.expandvars(user_input)) or
+                os.path.ismount(os.path.expandvars(user_input))):
             user_input = os.path.expandvars(user_input)
             if user_input.endswith(os.sep):
                 # path is expected to be a directory
