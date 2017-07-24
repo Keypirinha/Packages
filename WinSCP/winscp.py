@@ -236,8 +236,7 @@ class WinSCP(kp.Plugin):
             try:
                 hkey = winreg.OpenKey(
                     winreg.HKEY_CURRENT_USER,
-                    'Software\\Martin Prikryl\\WinSCP 2\\Sessions',
-                    access=winreg.KEY_READ | winreg.KEY_ENUMERATE_SUB_KEYS)
+                    'Software\\Martin Prikryl\\WinSCP 2\\Sessions')
                 index = 0
                 while True:
                     try:

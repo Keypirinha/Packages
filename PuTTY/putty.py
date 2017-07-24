@@ -199,8 +199,7 @@ class PuTTY(kp.Plugin):
         try:
             hkey = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
-                'Software\\SimonTatham\\PuTTY\\Sessions',
-                access=winreg.KEY_READ | winreg.KEY_ENUMERATE_SUB_KEYS)
+                'Software\\SimonTatham\\PuTTY\\Sessions')
             index = 0
             while True:
                 try:
