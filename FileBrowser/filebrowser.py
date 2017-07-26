@@ -5,12 +5,15 @@ import keypirinha_util as kpu
 import keypirinha_wintypes as kpwt
 
 import ctypes as ct
+import natsort
 import os
 import stat
 import string
+import winreg
 
 class FileBrowser(kp.Plugin):
     """Browse the filesystem as you type"""
+    DEFAULT_SHOW_RECENTS = True
     DEFAULT_SHOW_DIRS_FIRST = True
     DEFAULT_SHOW_HIDDEN_FILES = False
     DEFAULT_SHOW_SYSTEM_FILES = False
@@ -18,6 +21,7 @@ class FileBrowser(kp.Plugin):
     DEFAULT_FOLLOW_SHELL_LINKS = True
     DEFAULT_HOME_TRIGGER = "~"
 
+    show_recents = DEFAULT_SHOW_RECENTS
     show_dirs_first = DEFAULT_SHOW_DIRS_FIRST
     show_hidden_files = DEFAULT_SHOW_HIDDEN_FILES
     show_system_files = DEFAULT_SHOW_SYSTEM_FILES
@@ -38,20 +42,28 @@ class FileBrowser(kp.Plugin):
             user_input = os.path.normpath(user_input)
 
         # initial search, home dir(s)
-        if not items_chain and len(self.home_trigger) > 0 and orig_user_input.lower().startswith(self.home_trigger.lower()):
+        if (not items_chain and
+                len(self.home_trigger) > 0 and
+                orig_user_input.lower().startswith(self.home_trigger.lower())):
             suggestions, match_method, sort_method = self._home_suggestions(orig_user_input[len(self.home_trigger):])
             self.set_suggestions(suggestions, match_method, sort_method)
 
         # initial search, "\" or "/"
         elif not items_chain and user_input == os.sep:
             suggestions = self._drives_suggestions()
-            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.LABEL_ASC)
+            match_method = kp.Match.ANY
+            sort_method = kp.Sort.LABEL_ASC
+            if self.show_recents:
+                self._insert_recents(suggestions, match_method, sort_method)
+            self.set_suggestions(suggestions, match_method, sort_method)
 
         # initial search, user_input format is like "X:"
         elif not items_chain and (
                 len(user_input) == 2 and user_input[1] == ":" and
                 user_input[0].upper() in string.ascii_uppercase):
             suggestions, match_method, sort_method = self._browse_dir(user_input + os.sep)
+            if self.show_recents:
+                self._insert_recents(suggestions, match_method, sort_method, user_input)
             self.set_suggestions(suggestions, match_method, sort_method)
 
         # initial search, user_input is an absolute path, or a UNC
@@ -67,10 +79,14 @@ class FileBrowser(kp.Plugin):
             if user_input.endswith(os.sep):
                 # path is expected to be a directory
                 suggestions, match_method, sort_method = self._browse_dir(user_input)
+                if self.show_recents:
+                    self._insert_recents(suggestions, match_method, sort_method, user_input)
                 self.set_suggestions(suggestions, match_method, sort_method)
             elif os.path.isdir(user_input):
                 # path is a directory
                 suggestions, match_method, sort_method = self._browse_dir(user_input, check_base_dir=False)
+                if self.show_recents:
+                    self._insert_recents(suggestions, match_method, sort_method, user_input)
                 self.set_suggestions(suggestions, match_method, sort_method)
             elif os.path.exists(user_input):
                 # user_input is an item of the filesystem
@@ -97,6 +113,8 @@ class FileBrowser(kp.Plugin):
                     self._sort_matched_suggestions(suggestions)
                     match_method = kp.Match.ANY
                     sort_method = kp.Sort.NONE
+                if self.show_recents:
+                    self._insert_recents(suggestions, match_method, sort_method, user_input)
                 self.set_suggestions(suggestions, match_method, sort_method)
 
         # current item is a FILE
@@ -112,7 +130,8 @@ class FileBrowser(kp.Plugin):
                 exists = True
                 # check if file is a link pointing to a directory, in which case
                 # we want to browse it
-                if self.follow_shell_links and os.path.splitext(current_item.target())[1].lower() == ".lnk":
+                if self.follow_shell_links and os.path.splitext(
+                        current_item.target())[1].lower() == ".lnk":
                     try:
                         link_props = kpu.read_link(current_item.target())
                         if os.path.isdir(link_props['target']):
@@ -149,6 +168,8 @@ class FileBrowser(kp.Plugin):
     def _read_config(self):
         settings = self.load_settings()
 
+        self.show_recents = settings.get_bool(
+            "show_recents", "main", self.DEFAULT_SHOW_RECENTS)
         self.show_dirs_first = settings.get_bool(
             "show_dirs_first", "main", self.DEFAULT_SHOW_DIRS_FIRST)
         self.show_hidden_files = settings.get_bool(
@@ -170,7 +191,8 @@ class FileBrowser(kp.Plugin):
             # apply default "home" value if needed
             if not home_value_lines:
                 try:
-                    home_value_lines = [kpwt.get_known_folder_path(kpwt.FOLDERID.Profile)]
+                    home_value_lines = [
+                        kpwt.get_known_folder_path(kpwt.FOLDERID.Profile)]
                 except OSError as exc:
                     self.warn(str(exc))
                     home_value_lines = []
@@ -212,7 +234,8 @@ class FileBrowser(kp.Plugin):
                 # try to open the drive to see if it's ready
                 with kpwt.ScopedSysErrorMode():
                     disk_bytes = kpwt.ULARGE_INTEGER(0)
-                    if kpwt.kernel32.GetDiskFreeSpaceExW(drv_path, None, ct.byref(disk_bytes), None):
+                    if kpwt.kernel32.GetDiskFreeSpaceExW(
+                            drv_path, None, ct.byref(disk_bytes), None):
                         suggestions.append(self.create_item(
                             category=kp.ItemCategory.FILE,
                             label=drv_path,
@@ -253,7 +276,8 @@ class FileBrowser(kp.Plugin):
             for home_dir in existing_home_dirs:
                 match_score = None
                 if len(search_terms) > 0:
-                    match_score = kpu.fuzzy_score(search_terms, os.path.basename(home_dir))
+                    match_score = kpu.fuzzy_score(search_terms,
+                                                  os.path.basename(home_dir))
                     if not match_score:
                         continue
                     match_score = str(match_score)
@@ -285,6 +309,7 @@ class FileBrowser(kp.Plugin):
         suggestions.sort(key=_sortkey, reverse=True)
 
     def _browse_dir(self, base_dir, check_base_dir=True, search_terms="", store_score=False):
+        base_dir = os.path.normpath(base_dir)
         return kpu.browse_directory(self,
                                     base_dir,
                                     check_base_dir=check_base_dir,
@@ -293,3 +318,74 @@ class FileBrowser(kp.Plugin):
                                     show_dirs_first=self.show_dirs_first,
                                     show_hidden_files=self.show_hidden_files,
                                     show_system_files=self.show_system_files)
+
+    def _insert_recents(self, suggestions, match_method=kp.Match.ANY,
+                        sort_method=kp.Sort.NONE, search_terms=""):
+        recents = []
+        if search_terms:
+            search_terms = os.path.normcase(os.path.normpath(search_terms))
+
+        try:
+            with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\TypedPaths") as hkey:
+                url_idx = 0
+                while True:
+                    (name, value, typ) = winreg.EnumValue(hkey, url_idx)
+                    url_idx += 1
+                    if typ == winreg.REG_SZ and name.lower().startswith("url"):
+                        # we must check that value is a path since value can
+                        # also be the name of a known folder like "Computer"
+                        value = os.path.normpath(value)
+                        if not (os.path.isabs(value) or os.path.ismount(value)):
+                            continue
+
+                        if search_terms and not os.path.normcase(value).startswith(search_terms):
+                            continue
+
+                        if match_method == kp.Match.FUZZY:
+                            score = str(kpu.fuzzy_score(search_terms, value))
+                        else:
+                            score = None
+
+                        recents.append(self.create_item(
+                            category=kp.ItemCategory.FILE,
+                            label=value,
+                            short_desc="",
+                            target=value,
+                            args_hint=kp.ItemArgsHint.ACCEPTED,
+                            hit_hint=kp.ItemHitHint.KEEPALL,
+                            loop_on_suggest=True,
+                            data_bag=score))
+        except OSError as exc:
+            pass
+
+        if sort_method == kp.Sort.NONE:
+
+            def _find_same_item(target, lst):
+                target = os.path.normpath(target)
+                for idx in range(len(lst)):
+                    if target == os.path.normpath(lst[idx].target()):
+                        return idx
+                return None
+
+            # remove duplicates by ourselves so Keypirinha does not try to merge
+            # them, which may alter the desired positioning of items
+            for recent_item in recents:
+                match_idx = _find_same_item(recent_item.target(), suggestions)
+                if match_idx is not None:
+                    suggestions.pop(match_idx)
+
+            recents = natsort.natsorted(recents, key=lambda x: x.label(),
+                alg=natsort.ns.PATH | natsort.ns.LOCALE | natsort.ns.IGNORECASE)
+
+            # prepend the recents list to the suggestions
+            # but always keep the "." item at the top
+            if len(suggestions) > 0 and suggestions[0].label() == ".":
+                suggestions[1:0] = recents
+            else:
+                suggestions[:0] = recents
+
+        else:
+            # note: Keypirinha will take care of removing duplicates
+            suggestions += recents
