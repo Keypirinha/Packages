@@ -124,6 +124,7 @@ class Calc(kp.Plugin):
     DEFAULT_KEYWORD = "="
     DEFAULT_ALWAYS_EVALUATE = True
     DEFAULT_ROUNDING_PRECISION = 5
+    DEFAULT_BASE_CONVERSION = True
     DEFAULT_CURRENCY_MODE = "float"
     DEFAULT_CURRENCY_FORMAT = "system"
     DEFAULT_CURRENCY_DECIMALSEP = "."
@@ -244,6 +245,7 @@ class Calc(kp.Plugin):
     transmap_input = ""
     transmap_output = ""
     rounding_precision = DEFAULT_ROUNDING_PRECISION
+    base_conversion = DEFAULT_BASE_CONVERSION
     currency_enabled = True
     currency_float_only = True
     currency_from_system = True
@@ -396,6 +398,10 @@ class Calc(kp.Plugin):
             self.transmap_input = ""
             self.transmap_output = ""
 
+        # [main] base conversion
+        self.base_conversion = settings.get_bool(
+            "base_conversion", "main", self.DEFAULT_BASE_CONVERSION)
+
         # [main] rounding_precision
         if not settings.has("rounding_precision", "main"):
             self.rounding_precision = self.DEFAULT_ROUNDING_PRECISION
@@ -488,13 +494,22 @@ class Calc(kp.Plugin):
             try:
                 if self.ans.lower().startswith("0b"):
                     self.ans = int(self.ans, base=2)
-                    return (bin(self.ans), self.ans, hex(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    if self.base_conversion:
+                        return (bin(self.ans), self.ans, hex(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    else:
+                        return (bin(self.ans), ) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 elif self.ans.lower().startswith("0o"):
                     self.ans = int(self.ans, base=8)
-                    return (oct(self.ans), self.ans, hex(self.ans), bin(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    if self.base_conversion:
+                        return (oct(self.ans), self.ans, hex(self.ans), bin(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    else:
+                        return (oct(self.ans), ) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 elif self.ans.lower().startswith("0x"):
                     self.ans = int(self.ans, base=16)
-                    return (hex(self.ans), self.ans, bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    if self.base_conversion:
+                        return (hex(self.ans), self.ans, bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+                    else:
+                        return (hex(self.ans), ) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
                 else:
                     self.ans = int(self.ans)
             except ValueError:
@@ -504,7 +519,10 @@ class Calc(kp.Plugin):
             self.ans = int(self.ans)
             return str(self.ans)
         elif isinstance(self.ans, int):
-            return (self.ans, hex(self.ans), bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+            if self.base_conversion:
+                return (self.ans, hex(self.ans), bin(self.ans), oct(self.ans)) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
+            else:
+                return (self.ans, ) + self._numberfmt(self.ans) + self._currencyfmt(self.ans)
         elif isinstance(self.ans, float):
             self.ans = Number(self.ans)
         elif isinstance(self.ans, complex):
@@ -533,13 +551,14 @@ class Calc(kp.Plugin):
                 results = list(results)
                 results.sort(key=len)
 
-                try:
-                    intval = self.ans.safe_int()
-                    for v in (str(intval), hex(intval), bin(intval), oct(intval)):
-                        if v not in results:
-                            results.append(v)
-                except:
-                    pass
+                if self.base_conversion:
+                    try:
+                        intval = self.ans.safe_int()
+                        for v in (str(intval), hex(intval), bin(intval), oct(intval)):
+                            if v not in results:
+                                results.append(v)
+                    except:
+                        pass
 
                 for v in self._numberfmt(self.ans):
                     results.append(v)
