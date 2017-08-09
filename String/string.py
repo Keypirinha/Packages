@@ -238,6 +238,22 @@ class _Functor_ZLib(_Functor):
         result = getattr(zlib, self.name)(data)
         return (i2xx(result, False), i2xx(result, True), str(result))
 
+class _Functor_ChangeCase(_Functor):
+    _algorithms = ("upper", "lower", "capitalize", "title")
+
+    def __init__(self):
+        super().__init__("change_case", "Cases", "Change the case to a specific type")
+
+    def convert(self, data):
+        data = data.strip() if isinstance(data, str) else str(data)
+
+        results = []
+        for algo in self._algorithms:
+            desc = "Change to {} case".format(algo)
+            value = getattr(data, algo)()
+            results.append({'label': value, 'target': value, 'desc': desc})
+        return results
+
 
 class String(kp.Plugin):
     """
@@ -280,7 +296,8 @@ class String(kp.Plugin):
             _Functor_UrlSplit(),
             _Functor_UrlUnquote(),
             _Functor_ZLib("adler32"),
-            _Functor_ZLib("crc32")]
+            _Functor_ZLib("crc32"),
+            _Functor_ChangeCase()]
 
         for algo in hashlib.algorithms_available:
             # some algorithms are declared twice in the list, like 'MD4' and
