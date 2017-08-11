@@ -28,15 +28,18 @@ class WebSearch(kp.Plugin):
 
     default_icon_handle = None
     sites = {}
+    icons = {}
 
     def __init__(self):
         super().__init__()
 
     def on_start(self):
         self._setup_default_icon()
+        self._load_icons()
 
     def on_catalog(self):
         self._setup_default_icon()
+        self._load_icons()
         self._read_config()
         catalog = []
         for site_name, site in self.sites.items():
@@ -46,7 +49,8 @@ class WebSearch(kp.Plugin):
                 short_desc="Search {}".format(site['label']),
                 target=kpu.kwargs_encode(site=site_name),
                 args_hint=kp.ItemArgsHint.ACCEPTED,
-                hit_hint=site['history_keep']))
+                hit_hint=site['history_keep'],
+                icon_handle=self.icons.get(site_name)))
         self.set_catalog(catalog)
 
     def on_suggest(self, user_input, items_chain):
@@ -99,6 +103,41 @@ class WebSearch(kp.Plugin):
             self.default_icon_handle = self.load_icon("@{},0".format(args[0]))
             if self.default_icon_handle:
                 self.set_default_icon(self.default_icon_handle)
+
+    def _load_icons(self):
+        for icon in self.icons.values():
+            icon.free()
+        self.icons = {}
+
+        icons_path = os.path.join(self.get_package_cache_path(), 'icons')
+        if not os.path.exists(icons_path):
+            return
+
+        # find cached icons and group them by network domain name
+        cache_resources = {}
+        for file in os.listdir(icons_path):
+            file_title, file_ext = os.path.splitext(file)
+            if file_ext.lower() not in (".ico", ".png", ".jpg", ".jpeg"):
+                continue
+
+            netdomain = file_title.lower()
+            try:
+                cache_resources[netdomain].append(file)
+            except KeyError:
+                cache_resources[netdomain] = [file]
+
+        # load cached icons
+        package_name = self.package_full_name()
+        for netdomain, files in cache_resources.items():
+            resources = ["cache://{}/icons/{}".format(package_name, f) for f in files]
+            try:
+                icon = self.load_icon(resources)
+            except:
+                self.warn("Failed to load icon from:", ", ".join(resources))
+                traceback.print_exc()
+                continue
+
+            self.icons[netdomain] = icon
 
     def _url_build(self, url_format, search_terms, quoting='auto', fallback_url=None):
         def _quote(fmt_string, search_terms, quoting):
