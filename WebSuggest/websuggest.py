@@ -238,6 +238,7 @@ class WebSuggest(kp.Plugin):
 
     DEFAULT_ENABLE_PREDEFINED_PROVIDERS = True
     DEFAULT_ENABLE_PREDEFINED_ITEMS = True
+    DEFAULT_WAITING_TIME = 0.25
     DEFAULT_ACTION = ACTION_BROWSE
 
     actions_names = []
@@ -245,6 +246,7 @@ class WebSuggest(kp.Plugin):
     icons = {}
     providers = {}
     profiles = {}
+    waiting_time = DEFAULT_WAITING_TIME
 
     def __init__(self):
         super().__init__()
@@ -315,7 +317,7 @@ class WebSuggest(kp.Plugin):
         suggestions = [default_item]
 
         # avoid doing unnecessary network requests in case user is still typing
-        if len(user_input) < 2 or self.should_terminate(0.25):
+        if len(user_input) < 2 or self.should_terminate(self.waiting_time):
             self.set_suggestions(suggestions)
             return
 
@@ -422,6 +424,9 @@ class WebSuggest(kp.Plugin):
         enable_predefined_items = settings.get_bool(
             "enable_predefined_items", self.CONFIG_SECTION_MAIN,
             fallback=self.DEFAULT_ENABLE_PREDEFINED_ITEMS)
+        self.waiting_time = settings.get_float(
+            "waiting_time", self.CONFIG_SECTION_MAIN,
+            fallback=self.DEFAULT_WAITING_TIME, min=0.25)
 
         # [predefined_provider/*] and [provider/*] sections
         for section in settings.sections():
