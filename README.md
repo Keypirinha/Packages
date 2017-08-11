@@ -19,7 +19,10 @@ license, which you can find in the `LICENSE` file located in this directory.
 2. Fork the [repository][packs_repo] on GitHub to start making your changes to
    the **dev** branch (or branch off of it).
 3. Send a pull request.
-4. Add yourself to the *Contributors* list below!
+   Please stick to **one feature per PR**. If it is not possible due to the
+   nature of the feature(s), at least try to stick to one Keypirinha Package per
+   PR.
+4. Add yourself to the *Contributors* list below (alphabetical order)!
 
 [app_issues]: https://github.com/Keypirinha/Keypirinha/issues
 [packs_repo]: https://github.com/Keypirinha/Packages
