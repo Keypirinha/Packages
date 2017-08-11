@@ -106,8 +106,8 @@ class URL(kp.Plugin):
             "keep_history", "main", self.DEFAULT_KEEP_HISTORY)
 
     def _read_tld_databases(self):
-        tlds_dict = {}
-        for resource in sorted(self.find_resources("tld-*.txt")):
+        tlds = set()
+        for resource in self.find_resources("tld-*.txt"):
             try:
                 lines = self.load_text_resource(resource).splitlines()
             except Exception as exc:
@@ -115,14 +115,15 @@ class URL(kp.Plugin):
                 continue
             for line in lines:
                 line = line.strip().lower()
-                if not len(line) or line[0] in ("#", ";"):
+                if not line or line[0] in ("#", ";"):
                     continue
-                tlds_dict[line] = None
-        if not tlds_dict:
+                tlds.add(line)
+
+        if not tlds:
             self.warn("Empty TLD database. Falling back to default...")
-            self.known_tlds = sorted(self.KNOWN_TLDS)
+            self.known_tlds = self.KNOWN_TLDS
         else:
-            self.known_tlds = sorted(tlds_dict.keys())
+            self.known_tlds = tuple(tlds_dict)
 
     def _extract_url_scheme(self, user_input):
         user_input = user_input.strip()
@@ -134,7 +135,7 @@ class URL(kp.Plugin):
             return rem.group(1), user_input
 
         # does input string contain a known ".tld"?
-        if any(["."+tld in user_input_lc for tld in self.known_tlds]):
+        if any( ("."+tld in user_input_lc for tld in self.known_tlds) ):
             return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input
 
         # does input string contain a valid IPv4 or IPv6 address?
