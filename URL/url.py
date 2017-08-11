@@ -123,7 +123,7 @@ class URL(kp.Plugin):
             self.warn("Empty TLD database. Falling back to default...")
             self.known_tlds = self.KNOWN_TLDS
         else:
-            self.known_tlds = tuple(tlds_dict)
+            self.known_tlds = tuple(tlds)
 
     def _extract_url_scheme(self, user_input):
         user_input = user_input.strip()
