@@ -334,10 +334,10 @@ class WebSuggest(kp.Plugin):
 
         if suggestions:
             self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
-        else:  # default item if not founded suggestions
+        else:
             item = current_item.clone()
             item.set_args(user_input)
-            item.set_short_desc("Suggestions not found (default action: {})".format(
+            item.set_short_desc("No suggestions found (default action: {})".format(
                                 profile['default_action']))
             self.set_suggestions([item])
 
