@@ -307,11 +307,18 @@ class WebSuggest(kp.Plugin):
             self.warn('Item definition not found in current config: "{}"'.format(profile_name))
             return
 
+        default_item = current_item.clone()
+        default_item.set_args(user_input)
+        if not user_input:
+            default_item.set_short_desc("Open the search engine home page")
+
+        suggestions = [default_item]
+
         # avoid doing unnecessary network requests in case user is still typing
         if len(user_input) < 2 or self.should_terminate(0.25):
+            self.set_suggestions(suggestions)
             return
 
-        suggestions = []
         provider_suggestions = []
 
         try:
@@ -332,23 +339,31 @@ class WebSuggest(kp.Plugin):
             #item.set_data_bag(user_input)
             suggestions.append(item)
 
-        if suggestions:
-            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
-        else:
-            item = current_item.clone()
-            item.set_args(user_input)
-            item.set_short_desc("No suggestions found (default action: {})".format(
+        if not provider_suggestions:  # change default item
+            suggestions[0].set_short_desc("No suggestions found (default action: {})".format(
                                 profile['default_action']))
-            self.set_suggestions([item])
+
+        self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
     def on_execute(self, item, action):
         target_props = kpu.kwargs_decode(item.target())
         profile_name = target_props['profile']
+        args = item.raw_args()
 
         try:
             profile = self.profiles[profile_name]
         except KeyError:
             self.warn('Item definition not found in current config: "{}"'.format(profile_name))
+            return
+
+        if not args:  # open the search engine home page
+            base = profile['provider'].browse_base
+            try:
+                parts = urllib.parse.urlsplit(base)
+                url = '{}://{}'.format(parts.scheme, parts.netloc)
+            except ValueError:
+                url = base
+            kpu.web_browser_command(url=url, execute=True)
             return
 
         # choose action
@@ -366,7 +381,7 @@ class WebSuggest(kp.Plugin):
         # browse or copy url
         if action_name in (self.ACTION_BROWSE, self.ACTION_BROWSE_PRIVATE,
                            self.ACTION_COPY_URL):
-            url = profile['provider'].build_browse_url(item.raw_args())
+            url = profile['provider'].build_browse_url(args)
 
             # copy url
             if action_name == self.ACTION_COPY_URL:
@@ -374,16 +389,12 @@ class WebSuggest(kp.Plugin):
 
             # launch browser
             else:
-                if action_name == self.ACTION_BROWSE_PRIVATE:
-                    private_mode = True
-                else:
-                    private_mode = None
-                kpu.web_browser_command(private_mode=private_mode, url=url,
-                                        execute=True)
+                private_mode = True if action_name == self.ACTION_BROWSE_PRIVATE else None
+                kpu.web_browser_command(private_mode=private_mode, url=url, execute=True)
 
         # default action: copy result (ACTION_COPY_RESULT)
         else:
-            kpu.set_clipboard(item.raw_args())
+            kpu.set_clipboard(args)
 
     def on_events(self, flags):
         if flags & (kp.Events.APPCONFIG | kp.Events.PACKCONFIG |
