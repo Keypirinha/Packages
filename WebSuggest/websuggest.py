@@ -238,7 +238,7 @@ class WebSuggest(kp.Plugin):
 
     DEFAULT_ENABLE_PREDEFINED_PROVIDERS = True
     DEFAULT_ENABLE_PREDEFINED_ITEMS = True
-    DEFAULT_WAITING_TIME = 0.25
+    DEFAULT_IDLE_TIME = 0.25
     DEFAULT_ACTION = ACTION_BROWSE
 
     actions_names = []
@@ -246,7 +246,7 @@ class WebSuggest(kp.Plugin):
     icons = {}
     providers = {}
     profiles = {}
-    waiting_time = DEFAULT_WAITING_TIME
+    idle_time = DEFAULT_IDLE_TIME
 
     def __init__(self):
         super().__init__()
@@ -309,16 +309,17 @@ class WebSuggest(kp.Plugin):
             self.warn('Item definition not found in current config: "{}"'.format(profile_name))
             return
 
-        default_item = current_item.clone()
-        default_item.set_args(user_input)
-        if not user_input:
-            default_item.set_short_desc("Open the search engine home page")
+        suggestions = [current_item.clone()]
 
-        suggestions = [default_item]
+        # default item
+        suggestions[0].set_args(user_input)
+        if not user_input:
+            suggestions[0].set_short_desc("Open the search engine home page")
+            self.set_suggestions(suggestions)
+            return
 
         # avoid doing unnecessary network requests in case user is still typing
-        if len(user_input) < 2 or self.should_terminate(self.waiting_time):
-            self.set_suggestions(suggestions)
+        if len(user_input) < 2 or self.should_terminate(self.idle_time):
             return
 
         provider_suggestions = []
@@ -343,7 +344,7 @@ class WebSuggest(kp.Plugin):
 
         if not provider_suggestions:  # change default item
             suggestions[0].set_short_desc("No suggestions found (default action: {})".format(
-                                profile['default_action']))
+                                          profile['default_action']))
 
         self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
@@ -424,9 +425,9 @@ class WebSuggest(kp.Plugin):
         enable_predefined_items = settings.get_bool(
             "enable_predefined_items", self.CONFIG_SECTION_MAIN,
             fallback=self.DEFAULT_ENABLE_PREDEFINED_ITEMS)
-        self.waiting_time = settings.get_float(
-            "waiting_time", self.CONFIG_SECTION_MAIN,
-            fallback=self.DEFAULT_WAITING_TIME, min=0.25)
+        self.idle_time = settings.get_float(
+            "idle_time", self.CONFIG_SECTION_MAIN,
+            fallback=self.DEFAULT_IDLE_TIME, min=0.25, max=3)
 
         # [predefined_provider/*] and [provider/*] sections
         for section in settings.sections():
