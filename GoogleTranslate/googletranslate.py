@@ -45,14 +45,14 @@ class GoogleTranslate(kp.Plugin):
     DEFAULT_ITEM_LABEL = "Translate"
     DEFAULT_LANG_IN = "auto"
     DEFAULT_LANG_OUT = "en"
-    DEFAULT_WAITING_TIME = 0.25
+    DEFAULT_IDLE_TIME = 0.25
 
     lang = {'in': {}, 'out': {}}
     default_item_enabled = DEFAULT_ITEM_ENABLED
     default_item_label = DEFAULT_ITEM_LABEL
     default_lang_in = DEFAULT_LANG_IN
     default_lang_out = DEFAULT_LANG_OUT
-    waiting_time = DEFAULT_WAITING_TIME
+    idle_time = DEFAULT_IDLE_TIME
 
     def __init__(self):
         super().__init__()
@@ -103,7 +103,7 @@ class GoogleTranslate(kp.Plugin):
         # query google translate if needed
         if query['lang_in'] and query['lang_out'] and len(query['terms']):
             # avoid doing too much network requests in case user is still typing
-            if self.should_terminate(self.waiting_time):
+            if self.should_terminate(self.idle_time):
                 return
 
             results = []
@@ -229,9 +229,9 @@ class GoogleTranslate(kp.Plugin):
         else:
             self.default_lang_out = validated_lang_code
 
-        self.waiting_time = settings.get_float(
-            "waiting_time", self.CONFIG_SECTION_DEFAULTS,
-            fallback=self.DEFAULT_WAITING_TIME, min=0.25)
+        self.idle_time = settings.get_float(
+            "idle_time", self.CONFIG_SECTION_DEFAULTS,
+            fallback=self.DEFAULT_IDLE_TIME, min=0.25, max=3)
 
         # [default_item/*] optional sections
         for section in settings.sections():
