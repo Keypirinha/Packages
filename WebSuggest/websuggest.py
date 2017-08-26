@@ -238,6 +238,7 @@ class WebSuggest(kp.Plugin):
 
     DEFAULT_ENABLE_PREDEFINED_PROVIDERS = True
     DEFAULT_ENABLE_PREDEFINED_ITEMS = True
+    DEFAULT_IDLE_TIME = 0.25
     DEFAULT_ACTION = ACTION_BROWSE
 
     actions_names = []
@@ -245,6 +246,7 @@ class WebSuggest(kp.Plugin):
     icons = {}
     providers = {}
     profiles = {}
+    idle_time = DEFAULT_IDLE_TIME
 
     def __init__(self):
         super().__init__()
@@ -307,11 +309,19 @@ class WebSuggest(kp.Plugin):
             self.warn('Item definition not found in current config: "{}"'.format(profile_name))
             return
 
-        # avoid doing unnecessary network requests in case user is still typing
-        if len(user_input) < 2 or self.should_terminate(0.25):
+        suggestions = [current_item.clone()]
+
+        # default item
+        suggestions[0].set_args(user_input)
+        if not user_input:
+            suggestions[0].set_short_desc("Open the search engine home page")
+            self.set_suggestions(suggestions)
             return
 
-        suggestions = []
+        # avoid doing unnecessary network requests in case user is still typing
+        if len(user_input) < 2 or self.should_terminate(self.idle_time):
+            return
+
         provider_suggestions = []
 
         try:
@@ -332,17 +342,31 @@ class WebSuggest(kp.Plugin):
             #item.set_data_bag(user_input)
             suggestions.append(item)
 
-        if suggestions:
-            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
+        if not provider_suggestions:  # change default item
+            suggestions[0].set_short_desc("No suggestions found (default action: {})".format(
+                                          profile['default_action']))
+
+        self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
 
     def on_execute(self, item, action):
         target_props = kpu.kwargs_decode(item.target())
         profile_name = target_props['profile']
+        args = item.raw_args()
 
         try:
             profile = self.profiles[profile_name]
         except KeyError:
             self.warn('Item definition not found in current config: "{}"'.format(profile_name))
+            return
+
+        if not args:  # open the search engine home page
+            base = profile['provider'].browse_base
+            try:
+                parts = urllib.parse.urlsplit(base)
+                url = '{}://{}'.format(parts.scheme, parts.netloc)
+            except ValueError:
+                url = base
+            kpu.web_browser_command(url=url, execute=True)
             return
 
         # choose action
@@ -360,7 +384,7 @@ class WebSuggest(kp.Plugin):
         # browse or copy url
         if action_name in (self.ACTION_BROWSE, self.ACTION_BROWSE_PRIVATE,
                            self.ACTION_COPY_URL):
-            url = profile['provider'].build_browse_url(item.raw_args())
+            url = profile['provider'].build_browse_url(args)
 
             # copy url
             if action_name == self.ACTION_COPY_URL:
@@ -368,16 +392,12 @@ class WebSuggest(kp.Plugin):
 
             # launch browser
             else:
-                if action_name == self.ACTION_BROWSE_PRIVATE:
-                    private_mode = True
-                else:
-                    private_mode = None
-                kpu.web_browser_command(private_mode=private_mode, url=url,
-                                        execute=True)
+                private_mode = True if action_name == self.ACTION_BROWSE_PRIVATE else None
+                kpu.web_browser_command(private_mode=private_mode, url=url, execute=True)
 
         # default action: copy result (ACTION_COPY_RESULT)
         else:
-            kpu.set_clipboard(item.raw_args())
+            kpu.set_clipboard(args)
 
     def on_events(self, flags):
         if flags & (kp.Events.APPCONFIG | kp.Events.PACKCONFIG |
@@ -405,6 +425,9 @@ class WebSuggest(kp.Plugin):
         enable_predefined_items = settings.get_bool(
             "enable_predefined_items", self.CONFIG_SECTION_MAIN,
             fallback=self.DEFAULT_ENABLE_PREDEFINED_ITEMS)
+        self.idle_time = settings.get_float(
+            "idle_time", self.CONFIG_SECTION_MAIN,
+            fallback=self.DEFAULT_IDLE_TIME, min=0.25, max=3)
 
         # [predefined_provider/*] and [provider/*] sections
         for section in settings.sections():
