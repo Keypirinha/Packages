@@ -10,7 +10,7 @@ import urllib.error
 import urllib.parse
 
 class GoogleTranslate(kp.Plugin):
-    """Suggest translations using Google Transate online service"""
+    """Suggest translations using Google Translate online service"""
 
     API_URL = "https://translate.google.com/translate_a/single"
     API_QUERY = (
