@@ -64,15 +64,25 @@ class _Functor_ArgSplitWin(_Functor):
     def convert(self, data):
         return kpu.cmdline_split(data)
 
-class _Functor_Keypirinha(_Functor):
+class _Functor_CaseConversion(_Functor):
+    _algorithms = (
+        ("lower", "Lower Case"),
+        ("upper", "Upper Case"),
+        ("capitalize", "Capitalized"),
+        ("title", "Title Case"),
+        ("swapcase", "Swapped Case"))
+
     def __init__(self):
-        super().__init__("keypirinha", "Hash (Keypirinha)",
-                         "Hash a string with Keypirinha's internal hasher")
+        super().__init__("case_convert", "Case Conversion",
+                         "Change the case of the given string")
 
     def convert(self, data):
-        if not data: return ()
-        result = keypirinha_api.hash_string(data)
-        return (i2xx(result, False), i2xx(result, True), str(result))
+        data = data.strip() if isinstance(data, str) else str(data)
+        results = []
+        for (algo, desc) in self._algorithms:
+            value = getattr(data, algo)()
+            results.append({'label': value, 'target': value, 'desc': desc})
+        return results
 
 class _Functor_Hashlib(_Functor):
     __slots__ = ("algo")
@@ -89,6 +99,16 @@ class _Functor_Hashlib(_Functor):
         hasher.update(data)
         result = hasher.hexdigest()
         return (result.lower(), result.upper())
+
+class _Functor_Keypirinha(_Functor):
+    def __init__(self):
+        super().__init__("keypirinha", "Hash (Keypirinha)",
+                         "Hash a string with Keypirinha's internal hasher")
+
+    def convert(self, data):
+        if not data: return ()
+        result = keypirinha_api.hash_string(data)
+        return (i2xx(result, False), i2xx(result, True), str(result))
 
 class _Functor_RandBytes(_Functor):
     def __init__(self):
@@ -238,28 +258,13 @@ class _Functor_ZLib(_Functor):
         result = getattr(zlib, self.name)(data)
         return (i2xx(result, False), i2xx(result, True), str(result))
 
-class _Functor_ChangeCase(_Functor):
-    _algorithms = ("upper", "lower", "capitalize", "title")
-
-    def __init__(self):
-        super().__init__("change_case", "Cases", "Change the case to a specific type")
-
-    def convert(self, data):
-        data = data.strip() if isinstance(data, str) else str(data)
-
-        results = []
-        for algo in self._algorithms:
-            desc = "Change to {} case".format(algo)
-            value = getattr(data, algo)()
-            results.append({'label': value, 'target': value, 'desc': desc})
-        return results
-
 
 class String(kp.Plugin):
     """
     A multi-purpose plugin for string conversion and generation
 
     Features:
+    * case conversion
     * hash a string using standard algorithms like CRC32, MD5, SHA*, etc...
     * generate a random UUID, also called GUID
     * generate a random password
@@ -286,6 +291,7 @@ class String(kp.Plugin):
             _Functor_ArgQuoteWin(),
             _Functor_ArgSplitUnix(),
             _Functor_ArgSplitWin(),
+            _Functor_CaseConversion(),
             _Functor_Keypirinha(),
             _Functor_RandBytes(),
             _Functor_RandPassword(),
@@ -296,8 +302,7 @@ class String(kp.Plugin):
             _Functor_UrlSplit(),
             _Functor_UrlUnquote(),
             _Functor_ZLib("adler32"),
-            _Functor_ZLib("crc32"),
-            _Functor_ChangeCase()]
+            _Functor_ZLib("crc32")]
 
         for algo in hashlib.algorithms_available:
             # some algorithms are declared twice in the list, like 'MD4' and
