@@ -78,10 +78,31 @@ class _Functor_CaseConversion(_Functor):
 
     def convert(self, data):
         data = data.strip() if isinstance(data, str) else str(data)
+
+        # We use a set to keep track of the resulting values so that algorithms
+        # giving the same result than a previous one is discarded. Otherwise,
+        # Keypirinha would merge duplicates with previous items in the
+        # suggestions list, resulting in original algo being positioned
+        # differently depending on the provided user input.
+        #
+        # Suggestions without keeping track of targets in a set (arg is "test"):
+        #   "test" - "Lower Case"
+        #   "Test" - "Title Case"
+        #   "TEST" - "Swapped Case"
+        #
+        # Suggestions made when we keep track of the targets with a set:
+        #   "test" - "Lower Case"
+        #   "TEST" - "Upper Case"
+        #   "Test" - "Capitalized"
+        targets = set()
+
         results = []
         for (algo, desc) in self._algorithms:
             value = getattr(data, algo)()
-            results.append({'label': value, 'target': value, 'desc': desc})
+            if value not in targets:
+                targets.add(value)
+                results.append({'label': value, 'target': value, 'desc': desc})
+
         return results
 
 class _Functor_Hashlib(_Functor):
