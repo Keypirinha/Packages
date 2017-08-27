@@ -41,14 +41,14 @@ class URL(kp.Plugin):
 
     keep_history = DEFAULT_KEEP_HISTORY
 
-    known_schemes = {}
+    known_schemes = set()
     known_tlds = KNOWN_TLDS
 
     def __init__(self):
         super().__init__()
 
     def on_start(self):
-        self.known_schemes = {}
+        self.known_schemes = set()
         self._read_config()
         self._read_tld_databases()
         #self.info("{} TLDs in database".format(len(self.known_tlds)))
@@ -60,7 +60,7 @@ class URL(kp.Plugin):
         if items_chain:
             return
 
-        url_scheme, corrected_url = self._extract_url_scheme(user_input)
+        url_scheme, corrected_url, default_scheme_applied = self._extract_url_scheme(user_input)
         if not url_scheme:
             return
 
@@ -69,19 +69,38 @@ class URL(kp.Plugin):
 
         scheme_registered = self._is_registered_url_scheme(url_scheme)
         if scheme_registered:
-            self.set_suggestions([self.create_item(
+            if self.keep_history:
+                hit_hint = kp.ItemHitHint.NOARGS
+            else:
+                hit_hint = kp.ItemHitHint.IGNORE
+
+            suggestions = [self.create_item(
                 category=kp.ItemCategory.URL,
                 label=corrected_url,
                 short_desc="Launch URL: " + corrected_url,
                 target=corrected_url,
                 args_hint=kp.ItemArgsHint.FORBIDDEN,
-                hit_hint=kp.ItemHitHint.NOARGS if self.keep_history else kp.ItemHitHint.IGNORE)])
+                hit_hint=hit_hint)]
+
+            # special case: if scheme is http and was applied by default, offer
+            # an https suggestion too
+            if default_scheme_applied and url_scheme.lower() == "http":
+                https_url = "https" + corrected_url[len(url_scheme):]
+                suggestions.append(self.create_item(
+                    category=kp.ItemCategory.URL,
+                    label=https_url,
+                    short_desc="Launch URL: " + https_url,
+                    target=https_url,
+                    args_hint=kp.ItemArgsHint.FORBIDDEN,
+                    hit_hint=hit_hint))
+
+            self.set_suggestions(suggestions)
 
     def on_execute(self, item, action):
         if item.category() != kp.ItemCategory.URL:
             return
 
-        url_scheme, corrected_url = self._extract_url_scheme(item.target())
+        url_scheme, corrected_url, default_scheme_applied = self._extract_url_scheme(item.target())
         if not url_scheme:
             self.warn("Could not guess URL scheme from URL:", item.target())
             return
@@ -132,11 +151,11 @@ class URL(kp.Plugin):
         # does input string starts with a valid scheme name?
         rem = self.REGEX_URL_PREFIX.match(user_input_lc)
         if rem:
-            return rem.group(1), user_input
+            return rem.group(1), user_input, False
 
         # does input string contain a known ".tld"?
         if any( ("."+tld in user_input_lc for tld in self.known_tlds) ):
-            return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input
+            return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input, True
 
         # does input string contain a valid IPv4 or IPv6 address?
         groups = re.split(r"/|\[|\]:\d+", user_input)
@@ -152,24 +171,24 @@ class URL(kp.Plugin):
                             # not contain any dot. Avoid to pollute the
                             # suggestions list with that.
                             break
-                        return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input
+                        return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input, True
                     except OSError:
                         pass
                 break
 
-        return None, None
+        return None, None, False
 
     def _is_registered_url_scheme(self, url_scheme):
         if url_scheme in self.known_schemes:
             return True
 
         if url_scheme in self.WEB_SCHEMES:
-            self.known_schemes[url_scheme] = None
+            self.known_schemes.add(url_scheme)
             return True
 
         cmdline, defico = kpu.shell_url_scheme_to_command(url_scheme)
         if cmdline:
-            self.known_schemes[url_scheme] = None
+            self.known_schemes.add(url_scheme)
             return True
 
         return False
