@@ -257,11 +257,11 @@ class WebSuggest(kp.Plugin):
             self.create_action(
                 name=self.ACTION_BROWSE,
                 label="Open in browser",
-                short_desc="Open your query in Google Translate"),
+                short_desc="Open your query in browser"),
             self.create_action(
                 name=self.ACTION_BROWSE_PRIVATE,
                 label="Open in browser (Private Mode)",
-                short_desc="Open your query in Google Translate (Private Mode)"),
+                short_desc="Open your query in browser (Private Mode)"),
             self.create_action(
                 name=self.ACTION_COPY_RESULT,
                 label="Copy result",
