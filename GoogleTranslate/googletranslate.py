@@ -300,33 +300,28 @@ class GoogleTranslate(kp.Plugin):
         #   [,,"fr",,,[["meilleur definition",,[["Best definition",0,true,false],["better definition",0,true,false]],[[0,19]],"meilleur definition",0,0]],0.34457824,,[["fr"],,[0.34457824],["fr"]]]
 
         response = response.decode(encoding="utf-8", errors="strict")
-        while ",," in response:
-            response = response.replace(",,", ",null,")
-        while "[," in response:
-            response = response.replace("[,", "[null,")
+        response = response.replace(",,", ",null,").replace("[,", "[null,")
+        data = json.loads(response)
+        lang_in = data[2]
+        sentences = data[5]
 
-        json_root = json.loads(response)
-        translated = []
-
-        #for json_node in json_root[0]:
-        #    translated.append(json_node[0].strip())
-        #translated = " ".join(translated)
-        #lang_in = json_root[2]
-
-        # note: json_root[5] may be None when there is no translation to be done
+        # note: data[5] (sentences) may be None when there is no translation to be done
         # (i.e. target lang is "en" and text to translate is already in English)
-        lang_in = json_root[2]
-        if json_root[5] is not None:
-            for json_node in json_root[5][0][2]:
-                translated.append(json_node[0].strip())
+
+        translated = []
+        if sentences:
+            # extract the translation options for each sentence
+            sentences = ((variant[0] for variant in s[2]) for s in sentences)
+            # join variants in one text - line
+            for sentence in zip(*sentences):
+                translated.append(' '.join(sentence))
 
         # in case google's api support a new language that is not in our local
         # database yet, this ensures we don't create items with an unknown
         # lang_in value (catalog file, history file, ...)
         lang_in = self._match_lang_code("in", lang_in, fallback=query_lang_in)
 
-        #return {'result': translated, 'lang_in': lang_in}
-        return [{'result': res, 'lang_in': lang_in} for res in translated]
+        return ({'result': res, 'lang_in': lang_in} for res in translated)
 
     def _parse_and_merge_input(self, item, user_input=None):
         query = {
