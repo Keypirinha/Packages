@@ -39,7 +39,7 @@ class FileBrowser(kp.Plugin):
     def on_suggest(self, user_input, items_chain):
         orig_user_input = user_input
         if len(user_input) > 0:
-            user_input = os.path.normpath(user_input)
+            user_input = self._safe_normpath(user_input)
 
         # initial search, home dir(s)
         if (not items_chain and
@@ -48,8 +48,8 @@ class FileBrowser(kp.Plugin):
             suggestions, match_method, sort_method = self._home_suggestions(orig_user_input[len(self.home_trigger):])
             self.set_suggestions(suggestions, match_method, sort_method)
 
-        # initial search, "\" or "/"
-        elif not items_chain and user_input == os.sep:
+        # initial search, \ or \\
+        elif not items_chain and (user_input == os.sep or user_input == os.sep * 2):
             suggestions = self._drives_suggestions()
             match_method = kp.Match.ANY
             sort_method = kp.Sort.LABEL_ASC
@@ -67,14 +67,21 @@ class FileBrowser(kp.Plugin):
             self.set_suggestions(suggestions, match_method, sort_method)
 
         # initial search, user_input is an absolute path, or a UNC
-        # Notes:
+        # reminder:
+        #   os.path.isabs("\\\\server") == True
+        #   os.path.ismount("\\\\server") == False
+        #
+        #   os.path.isabs("\\\\server\\") == False
+        #   os.path.ismount("\\\\server\\") == True  (1)
+        #
         #   os.path.isabs("\\\\server\\share") == False
         #   os.path.ismount("\\\\server\\share") == True
+        #
         #   os.path.isabs("\\\\server\\share\\file") == True
         #   os.path.ismount("\\\\server\\share\\file") == False
         elif not items_chain and (
                 os.path.isabs(os.path.expandvars(user_input)) or
-                os.path.ismount(os.path.expandvars(user_input))):
+                os.path.ismount(os.path.expandvars(user_input).rstrip(os.sep))): # rstrip() to avoid (1)
             user_input = os.path.expandvars(user_input)
             if user_input.endswith(os.sep):
                 # path is expected to be a directory
@@ -102,19 +109,31 @@ class FileBrowser(kp.Plugin):
                     kp.Match.ANY,
                     kp.Sort.NONE)
             else:
-                # path is expected to be a directory suffixed by search terms
+                # here, user_input is:
+                # * the beginning of a UNC path
+                # * expected to be a directory suffixed by search terms
                 base_dir, search_terms = os.path.split(user_input)
-                suggestions, match_method, sort_method = self._browse_dir(
-                        base_dir, search_terms=search_terms, store_score=True)
-                if len(search_terms) > 0:
-                    # Because of the self.home_trigger prefix, the user_input cannot
-                    # be matched against files names. So we have to sort the
-                    # suggestions by ourselves.
-                    self._sort_matched_suggestions(suggestions)
+                is_incomplete_unc = not base_dir.strip(os.sep)
+
+                if is_incomplete_unc:
+                    suggestions = []
                     match_method = kp.Match.ANY
                     sort_method = kp.Sort.NONE
+                else:
+                    suggestions, match_method, sort_method = self._browse_dir(
+                        base_dir, search_terms=search_terms, store_score=True)
+                    if len(search_terms) > 0:
+                        # Because of the self.home_trigger prefix, the
+                        # user_input cannot be matched against files names.
+                        # So we have to sort the suggestions by ourselves.
+                        self._sort_matched_suggestions(suggestions)
+                        match_method = kp.Match.ANY
+                        sort_method = kp.Sort.NONE
+
                 if self.show_recents:
-                    self._insert_recents(suggestions, match_method, sort_method, user_input)
+                    self._insert_recents(suggestions, match_method, sort_method,
+                                         user_input)
+
                 self.set_suggestions(suggestions, match_method, sort_method)
 
         # current item is a FILE
@@ -217,8 +236,29 @@ class FileBrowser(kp.Plugin):
                 # directory. In order to be as flexible as possible, we must
                 # not assume it already exists.
                 else:
-                    self.home.append(os.path.normpath(home_dir))
+                    self.home.append(self._safe_normpath(home_dir))
 
+
+    def _safe_normpath(self, path):
+        # If the given path is not a complete UNC yet, os.path.normpath() will
+        # reduce the trailing \\ prefix to \. Here, we want to preserve the
+        # meaning of the prefix specified by the user.
+        #
+        # Examples:
+        #   os.path.normpath("//server/share") == "\\\\server\\share"
+        #   os.path.normpath("\\\\server") == "\\server"
+        #   os.path.normpath("\\\\\\server\\share") == "\\server\\share" (WRONG)
+        prefix_seps = 0
+        for idx in range(min(2, len(path))):
+            if path[idx] not in (os.sep, os.altsep):
+                break
+            prefix_seps += 1
+
+        path = os.path.normpath(path)
+        if prefix_seps > 1:
+            path = (os.sep * 2) + path.lstrip(os.sep)
+
+        return path
 
     def _drives_suggestions(self):
         suggestions = []
@@ -309,7 +349,7 @@ class FileBrowser(kp.Plugin):
         suggestions.sort(key=_sortkey, reverse=True)
 
     def _browse_dir(self, base_dir, check_base_dir=True, search_terms="", store_score=False):
-        base_dir = os.path.normpath(base_dir)
+        base_dir = self._safe_normpath(base_dir)
         return kpu.browse_directory(self,
                                     base_dir,
                                     check_base_dir=check_base_dir,
@@ -323,7 +363,7 @@ class FileBrowser(kp.Plugin):
                         sort_method=kp.Sort.NONE, search_terms=""):
         recents = []
         if search_terms:
-            search_terms = os.path.normcase(os.path.normpath(search_terms))
+            search_terms = os.path.normcase(self._safe_normpath(search_terms))
 
         try:
             with winreg.OpenKey(
@@ -336,7 +376,7 @@ class FileBrowser(kp.Plugin):
                     if typ == winreg.REG_SZ and name.lower().startswith("url"):
                         # we must check that value is a path since value can
                         # also be the name of a known folder like "Computer"
-                        value = os.path.normpath(value)
+                        value = self._safe_normpath(value)
                         if not (os.path.isabs(value) or os.path.ismount(value)):
                             continue
 
@@ -363,9 +403,9 @@ class FileBrowser(kp.Plugin):
         if sort_method == kp.Sort.NONE:
 
             def _find_same_item(target, lst):
-                target = os.path.normpath(target)
+                target = self._safe_normpath(target)
                 for idx in range(len(lst)):
-                    if target == os.path.normpath(lst[idx].target()):
+                    if target == self._safe_normpath(lst[idx].target()):
                         return idx
                 return None
 
