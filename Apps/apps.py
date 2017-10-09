@@ -511,6 +511,9 @@ class CustomCmds(_BasePlugin):
             cmd_item_label = item_label_format.format(
                 cmd_name=cmd_label, plugin_name=self.friendly_name())
 
+            cmd_app_icon = settings.get(
+                "icon", section=section, fallback="")
+
             cmd_hit_hint = settings.get_mapped(
                 "history_keep", section=section, fallback=default_history_keep,
                 map=supported_history_keep_values)
@@ -535,11 +538,11 @@ class CustomCmds(_BasePlugin):
                 'item_label': cmd_item_label,
                 'args_hint': cmd_args_hint,
                 'hit_hint': cmd_hit_hint,
-                'icon_handle': self._customcmd_icon(cmd_lines),
+                'icon_handle': self._customcmd_icon(cmd_app_icon),
                 'auto_terminal': cmd_auto_terminal,
                 'elevated': cmd_elevated}
 
-    def _customcmd_icon(self, cmd_lines):
+    def _customcmd_icon(self, cmd_app_icon):
         #for cmdline in cmd_lines:
         #    try:
         #        args = kpu.cmdline_split(cmdline)
@@ -554,7 +557,11 @@ class CustomCmds(_BasePlugin):
         #                return icon_handle
         #        except ValueError:
         #            pass
-        return None
+        icon_fetch = self.load_icon( "@{},0".format( cmd_app_icon ) )
+        if icon_fetch:
+            return icon_fetch
+        else:
+            return None
 
     def _customcmd_apply_args(self, cmd_lines, args_str):
         try:
