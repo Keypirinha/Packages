@@ -124,6 +124,7 @@ class StartMenu(_BasePlugin):
             self.set_catalog([])
             return
 
+        start = time.perf_counter()
         known_folders = (
             # folder, scan recursively
             (kpwt.FOLDERID.CommonStartup, True),
@@ -139,6 +140,7 @@ class StartMenu(_BasePlugin):
                 return
 
         self.set_catalog(catalog)
+        self._log_catalog_duration(start, len(catalog))
 
     def on_events(self, flags):
         must_catalog = False
@@ -178,6 +180,7 @@ class Desktop(_BasePlugin):
             self.set_catalog([])
             return
 
+        start = time.perf_counter()
         known_folders = (
             # folder, scan recursively
             (kpwt.FOLDERID.PublicDesktop, False),
@@ -191,6 +194,7 @@ class Desktop(_BasePlugin):
                 return
 
         self.set_catalog(catalog)
+        self._log_catalog_duration(start, len(catalog))
 
     def on_events(self, flags):
         must_catalog = False
