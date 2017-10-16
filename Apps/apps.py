@@ -521,6 +521,8 @@ class CustomCmds(_BasePlugin):
             cmd_elevated = settings.get_bool(
                 "elevated", section=section, fallback=False)
 
+            cmd_icon = settings.get("icon", section=section, fallback=None)
+
             cmd_has_placeholders = any(map(
                 lambda s: self.REGEX_PLACEHOLDER.search(s) is not None,
                 cmd_lines))
@@ -535,26 +537,36 @@ class CustomCmds(_BasePlugin):
                 'item_label': cmd_item_label,
                 'args_hint': cmd_args_hint,
                 'hit_hint': cmd_hit_hint,
-                'icon_handle': self._customcmd_icon(cmd_lines),
+                # 'icon_handle': self._customcmd_icon(cmd_lines),
+                'icon_handle': self._customcmd_icon(cmd_icon),
                 'auto_terminal': cmd_auto_terminal,
                 'elevated': cmd_elevated}
 
-    def _customcmd_icon(self, cmd_lines):
-        #for cmdline in cmd_lines:
-        #    try:
-        #        args = kpu.cmdline_split(cmdline)
-        #    except:
-        #        traceback.print_exc()
-        #        continue
-        #    args[0] = kpu.shell_resolve_exe_path(args[0])
-        #    if args[0] is not None:
-        #        try:
-        #            icon_handle = self.load_icon("file:///" + args[0])
-        #            if icon_handle:
-        #                return icon_handle
-        #        except ValueError:
-        #            pass
+    def _customcmd_icon(self, path):
+        if path is not None:
+            try:
+                return self.load_icon(path)
+            except ValueError:
+                pass
+
         return None
+
+    # def _customcmd_icon(self, cmd_lines):
+    #     for cmdline in cmd_lines:
+    #        try:
+    #            args = kpu.cmdline_split(cmdline)
+    #        except:
+    #            traceback.print_exc()
+    #            continue
+    #        args[0] = kpu.shell_resolve_exe_path(args[0])
+    #        if args[0] is not None:
+    #            try:
+    #                icon_handle = self.load_icon("file:///" + args[0])
+    #                if icon_handle:
+    #                    return icon_handle
+    #            except ValueError:
+    #                pass
+    #     return None
 
     def _customcmd_apply_args(self, cmd_lines, args_str):
         try:
