@@ -262,12 +262,11 @@ class FilesCatalog(kp.Plugin):
 
     def __init__(self):
         super().__init__()
-        self._debug = True
+
+    def on_start(self):
+        self._read_config()
 
     def on_catalog(self):
-        if self._read_config() is None:
-            return
-
         start = time.perf_counter()
         catalog = []
         scanned_profiles = OrderedDict()
@@ -337,6 +336,12 @@ class FilesCatalog(kp.Plugin):
                 len(catalog), "s"[len(catalog)==1:],
                 time.perf_counter() - start))
 
+    def on_suggest(self, user_input, items_chain):
+        if items_chain and items_chain[-1].category() == kp.ItemCategory.FILE:
+            clone = items_chain[-1].clone()
+            clone.set_args(user_input)
+            self.set_suggestions([clone])
+
     def on_execute(self, item, action):
         kpu.execute_default_action(self, item, action)
 
@@ -346,7 +351,7 @@ class FilesCatalog(kp.Plugin):
                 self.on_catalog()
 
     def _read_config(self):
-        recatalog = False
+        config_changed = False
         settings = self.load_settings()
         profiles_map = OrderedDict() # profile name -> profile label
         profiles_def = OrderedDict() # profile name -> settings dict
@@ -363,7 +368,7 @@ class FilesCatalog(kp.Plugin):
             fallback=self.DEFAULT_CATALOG_LIMIT, min=5_000, max=300_000)
         if catalog_limit != self.catalog_limit:
             self.catalog_limit = catalog_limit
-            recatalog = True
+            config_changed = True
 
         # read profiles names and validate them
         # note: ini section names in Keypirinha are case-sensitive, we want
@@ -618,10 +623,10 @@ class FilesCatalog(kp.Plugin):
         if self.config_debug and self.profiles:
             self._print_profiles()
 
-        if not recatalog and self.profiles != old_profiles:
-            recatalog = True
+        if not config_changed and self.profiles != old_profiles:
+            config_changed = True
 
-        return recatalog
+        return config_changed
 
     def _read_profile_setting(self, profiles_map, profiles_def, settings,
                               profile_name, meth, key, *, fallback=None,
