@@ -2,19 +2,20 @@
 # Placeholder Python module for user's callback(s).
 #
 # Copy this file into the "Profile\Packages\FilesCatalog" folder so Keypirinha
-# can load your callback(s) at runtime. You may need to create the
-# "FilesCatalog" folder first.
+# can load your callback(s) at runtime.
+# You may need to create the "FilesCatalog" folder first.
 #
-# Your callback(s) can have any arbitrary name as long as it is supported by the
-# Python language and that you reference it using the *python_callback* setting.
+# Your callbacks can have any arbitrary name that is supported by the Python
+# language. Do not forget to reference them using the *python_callback* setting.
 #
-# CAUTION: bear in mind that this function will be called for every single entry
-# of the filesystem from the scan loop so you may want to keep it as lightweight
-# as possible in terms of speed and I/O access.
+# CAUTION: bear in mind the callback function is called for every single
+# filesystem entry from the scan loop so you probably want to keep it as
+# lightweight as possible in terms of speed and I/O access.
 #
-# For convenience, filescatalog.py monkey-patches this module to declare the
-# following variables so you have access to some filescatalog's tools that may
-# come handy during the development of your callback:
+# For convenience, right after the import statement of this module,
+# filescatalog.py monkey-patches this module to declare the following variables
+# so you have access to some filescatalog's tools that may come handy during the
+# development of your callback:
 #   * _filefilter: the *filefilter* module (in filescatalog's "lib" directory)
 #   * _globex: the *globex* module (in filescatalog's "lib" directory)
 #   * _TEMPLATE_TAG_SEP: filescatalog's *TEMPLATE_TAG_SEP* constant
@@ -23,6 +24,11 @@
 #   * _default_scan_callback: filescatalog's own callback named
 #       *default_scan_callback* that you may want to call from your function as
 #       a fallback method for example
+#
+# Because those variables are not defined yet at import time, it is possible to
+# implement a ``on_imported()`` function that will be called right after this
+# module has been monkey-patch.
+# No return value is expected from it.
 #
 # As an example, here is how a callback function could be implemented.
 # This code mimics the default callback implemented in filescatalog.py:

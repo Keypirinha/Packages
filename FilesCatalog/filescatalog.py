@@ -240,6 +240,16 @@ try:
     filescatalog_user_callbacks._TEMPLATE_TAG_REGEX = TEMPLATE_TAG_REGEX
     filescatalog_user_callbacks._LazyItemLabelFormatter = LazyItemLabelFormatter
     filescatalog_user_callbacks._default_scan_callback = default_scan_callback
+
+    # notify user's module that we are done
+    try:
+        func = getattr(filescatalog_user_callbacks, "on_imported")
+        try:
+            func()
+        except:
+            traceback.print_exc()
+    except AttributeError:
+        pass
 except ImportError:
     traceback.print_exc()
     filescatalog_user_callbacks = None
@@ -595,8 +605,8 @@ class FilesCatalog(kp.Plugin):
                 profdef['callback'] = None
             else:
                 try:
-                    callback = getattr(filescatalog_user_callbacks,
-                                       profdef['callback'])
+                    profdef['callback'] = getattr(filescatalog_user_callbacks,
+                                                  profdef['callback'])
                     if not callable(profdef['callback']):
                         profdef['callback'] = None
                         self.warn((
@@ -606,7 +616,7 @@ class FilesCatalog(kp.Plugin):
                     profdef['callback'] = None
                     self.warn(
                         'Ignoring incorrect python_callback in "{}"'.format(
-                            section_name))
+                        section_name))
             if not profdef['callback']:
                 profdef['callback'] = default_scan_callback
 
