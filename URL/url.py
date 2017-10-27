@@ -8,31 +8,35 @@ import socket
 class URL(kp.Plugin):
     """Launch URLs"""
     WEB_SCHEMES = ("http", "https", "ftp")
-    KNOWN_TLDS = ( # some hard-coded TLDs in case DB resources can't be read
-        "ac", "ad", "aero", "ae", "af", "ag", "ai", "al", "am", "an", "ao",
-        "aq", "arpa", "ar", "asia", "as", "at", "au", "aw", "ax", "az", "ba",
-        "bb", "bd", "be", "bf", "bg", "bh", "biz", "bi", "bj", "bm", "bn", "bo",
-        "br", "bs", "bt", "bv", "bw", "by", "bz", "cat", "ca", "cc", "cd", "cf",
-        "cg", "ch", "ci", "ck", "cl", "cm", "cn", "coop", "com", "co", "cr",
-        "cu", "cv", "cx", "cy", "cz", "de", "dj", "dk", "dm", "do", "dz", "ec",
-        "edu", "ee", "eg", "er", "es", "et", "eu", "fi", "fj", "fk", "fm", "fo",
-        "fr", "ga", "gb", "gd", "ge", "gf", "gg", "gh", "gi", "gl", "gm", "gn",
-        "gov", "gp", "gq", "gr", "gs", "gt", "gu", "gw", "gy", "hk", "hm", "hn",
-        "hr", "ht", "hu", "id", "ie", "il", "im", "info", "int", "in", "io",
-        "iq", "ir", "is", "it", "je", "jm", "jobs", "jo", "jp", "ke", "kg",
-        "kh", "ki", "km", "kn", "kp", "kr", "kw", "ky", "kz", "la", "lb", "lc",
-        "li", "lk", "lr", "ls", "lt", "lu", "lv", "ly", "ma", "mc", "md", "me",
-        "mg", "mh", "mil", "mk", "ml", "mm", "mn", "mobi", "mo", "mp", "mq",
-        "mr", "ms", "mt", "museum", "mu", "mv", "mw", "mx", "my", "mz", "name",
-        "na", "nc", "net", "ne", "nf", "ng", "ni", "nl", "no", "np", "nr", "nu",
-        "nz", "om", "org", "pa", "pe", "pf", "pg", "ph", "pk", "pl", "pm", "pn",
-        "pro", "pr", "ps", "pt", "pw", "py", "qa", "re", "ro", "rs", "ru", "rw",
-        "sa", "sb", "sc", "sd", "se", "sg", "sh", "si", "sj", "sk", "sl", "sm",
-        "sn", "so", "sr", "st", "su", "sv", "sy", "sz", "tc", "td", "tel", "tf",
-        "tg", "th", "tj", "tk", "tl", "tm", "tn", "to", "tp", "travel", "tr",
-        "tt", "tv", "tw", "tz", "ua", "ug", "uk", "um", "us", "uy", "uz", "va",
-        "vc", "ve", "vg", "vi", "vn", "vu", "wf", "ws", "ye", "yt", "yu", "za",
-        "zm", "zw")
+    KNOWN_TLDS = set(( # some hard-coded TLDs in case DB resources can't be read
+        ".ac", ".ad", ".aero", ".ae", ".af", ".ag", ".ai", ".al", ".am", ".an",
+        ".ao", ".aq", ".arpa", ".ar", ".asia", ".as", ".at", ".au", ".aw",
+        ".ax", ".az", ".ba", ".bb", ".bd", ".be", ".bf", ".bg", ".bh", ".biz",
+        ".bi", ".bj", ".bm", ".bn", ".bo", ".br", ".bs", ".bt", ".bv", ".bw",
+        ".by", ".bz", ".cat", ".ca", ".cc", ".cd", ".cf", ".cg", ".ch", ".ci",
+        ".ck", ".cl", ".cm", ".cn", ".coop", ".com", ".co", ".cr", ".cu", ".cv",
+        ".cx", ".cy", ".cz", ".de", ".dj", ".dk", ".dm", ".do", ".dz", ".ec",
+        ".edu", ".ee", ".eg", ".er", ".es", ".et", ".eu", ".fi", ".fj", ".fk",
+        ".fm", ".fo", ".fr", ".ga", ".gb", ".gd", ".ge", ".gf", ".gg", ".gh",
+        ".gi", ".gl", ".gm", ".gn", ".gov", ".gp", ".gq", ".gr", ".gs", ".gt",
+        ".gu", ".gw", ".gy", ".hk", ".hm", ".hn", ".hr", ".ht", ".hu", ".id",
+        ".ie", ".il", ".im", ".info", ".int", ".in", ".io", ".iq", ".ir", ".is",
+        ".it", ".je", ".jm", ".jobs", ".jo", ".jp", ".ke", ".kg", ".kh", ".ki",
+        ".km", ".kn", ".kp", ".kr", ".kw", ".ky", ".kz", ".la", ".lb", ".lc",
+        ".li", ".lk", ".lr", ".ls", ".lt", ".lu", ".lv", ".ly", ".ma", ".mc",
+        ".md", ".me", ".mg", ".mh", ".mil", ".mk", ".ml", ".mm", ".mn", ".mobi",
+        ".mo", ".mp", ".mq", ".mr", ".ms", ".mt", ".museum", ".mu", ".mv",
+        ".mw", ".mx", ".my", ".mz", ".name", ".na", ".nc", ".net", ".ne", ".nf",
+        ".ng", ".ni", ".nl", ".no", ".np", ".nr", ".nu", ".nz", ".om", ".org",
+        ".pa", ".pe", ".pf", ".pg", ".ph", ".pk", ".pl", ".pm", ".pn", ".pro",
+        ".pr", ".ps", ".pt", ".pw", ".py", ".qa", ".re", ".ro", ".rs", ".ru",
+        ".rw", ".sa", ".sb", ".sc", ".sd", ".se", ".sg", ".sh", ".si", ".sj",
+        ".sk", ".sl", ".sm", ".sn", ".so", ".sr", ".st", ".su", ".sv", ".sy",
+        ".sz", ".tc", ".td", ".tel", ".tf", ".tg", ".th", ".tj", ".tk", ".tl",
+        ".tm", ".tn", ".to", ".tp", ".travel", ".tr", ".tt", ".tv", ".tw",
+        ".tz", ".ua", ".ug", ".uk", ".um", ".us", ".uy", ".uz", ".va", ".vc",
+        ".ve", ".vg", ".vi", ".vn", ".vu", ".wf", ".ws", ".ye", ".yt", ".yu",
+        ".za", ".zm", ".zw"))
     REGEX_URL_PREFIX = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*):")
 
     DEFAULT_SCHEME = WEB_SCHEMES[0]
@@ -51,7 +55,6 @@ class URL(kp.Plugin):
         self.known_schemes = set()
         self._read_config()
         self._read_tld_databases()
-        #self.info("{} TLDs in database".format(len(self.known_tlds)))
 
     def on_catalog(self):
         self.on_start()
@@ -126,23 +129,29 @@ class URL(kp.Plugin):
 
     def _read_tld_databases(self):
         tlds = set()
+        incomplete = False
+
         for resource in self.find_resources("tld-*.txt"):
             try:
-                lines = self.load_text_resource(resource).splitlines()
+                lines = self.load_text_resource(resource).lower().splitlines()
             except Exception as exc:
                 self.warn("Failed to load DB resource \"{}\". Error: {}".format(resource, exc))
+                incomplete = True
                 continue
+
             for line in lines:
-                line = line.strip().lower()
-                if not line or line[0] in ("#", ";"):
-                    continue
-                tlds.add(line)
+                line = line.strip()
+                if line and line[0] not in ("#", ";"):
+                    tlds.add("." + line)
 
         if not tlds:
             self.warn("Empty TLD database. Falling back to default...")
             self.known_tlds = self.KNOWN_TLDS
+        elif incomplete:
+            self.warn("Incomplete TLD database. Merging with default...")
+            self.known_tlds = tlds.union(self.KNOWN_TLDS)
         else:
-            self.known_tlds = tuple(tlds)
+            self.known_tlds = tlds
 
     def _extract_url_scheme(self, user_input):
         user_input = user_input.strip()
@@ -153,14 +162,24 @@ class URL(kp.Plugin):
         if rem:
             return rem.group(1), user_input, False
 
-        # does input string contain a known ".tld"?
-        if any( ("."+tld in user_input_lc for tld in self.known_tlds) ):
-            return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input, True
+        # since no scheme is specified we want to check the network location only
+        if "/" in user_input:
+            user_input = user_input.lstrip("/")
+            idx = user_input.find("/")
+            if idx > -1:
+                user_input = user_input[0:idx]
+            user_input_lc = user_input.lower()
 
-        # does input string contain a valid IPv4 or IPv6 address?
+        # does the input string contain a known ".tld" (but not as a prefix)?
+        if len(user_input_lc >= 3):
+            for tld in self.known_tlds:
+                if user_input_lc.find(tld, 1) > -1:
+                    return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input, True
+
+        # does the input string contain a valid IPv4 or IPv6 address?
         groups = re.split(r"/|\[|\]:\d+", user_input)
         for ip_addr in groups:
-            if not len(ip_addr):
+            if not ip_addr:
                 continue
             else:
                 for af in (socket.AF_INET6, socket.AF_INET):
