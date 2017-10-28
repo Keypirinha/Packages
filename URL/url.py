@@ -164,20 +164,22 @@ class URL(kp.Plugin):
 
         # since no scheme is specified we want to check the network location only
         if "/" in user_input:
-            user_input = user_input.lstrip("/")
-            idx = user_input.find("/")
-            if idx > -1:
-                user_input = user_input[0:idx]
-            user_input_lc = user_input.lower()
+            if user_input[0] == "/":
+                user_input = user_input.lstrip("/")
+                user_input_lc = user_input.lower()
+            idx = user_input_lc.find("/")
+            netloc_lc = user_input_lc[0:idx] if idx > -1 else user_input_lc
+        else:
+            netloc_lc = user_input_lc
 
         # does the input string contain a known ".tld" (but not as a prefix)?
-        if len(user_input_lc >= 3):
+        if len(netloc_lc) >= 3:
             for tld in self.known_tlds:
-                if user_input_lc.find(tld, 1) > -1:
+                if netloc_lc.find(tld, 1) > -1:
                     return self.DEFAULT_SCHEME, self.DEFAULT_SCHEME_PREFIX + user_input, True
 
         # does the input string contain a valid IPv4 or IPv6 address?
-        groups = re.split(r"/|\[|\]:\d+", user_input)
+        groups = re.split(r"/|\[|\]:\d+", netloc_lc)
         for ip_addr in groups:
             if not ip_addr:
                 continue
