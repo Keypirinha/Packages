@@ -3,8 +3,9 @@
 import keypirinha_api
 import keypirinha as kp
 import keypirinha_util as kpu
-from .lib import globex
-from .lib import filefilter
+import globex
+import filefilter
+
 from collections import namedtuple, OrderedDict
 import time
 import os
@@ -35,7 +36,8 @@ TEMPLATE_TAG_REGEX = re.compile(
 
 ScanProfile = namedtuple("ScanProfile", (
     "label", "paths", "max_depth",
-    "include_hidden", "include_dirs", "include_files", "filters",
+    "include_hidden", "include_dirs", "include_files",
+    "filters", "filters_default",
     "trim_extensions",
     "file_item_label", "file_item_desc",
     "dir_item_label", "dir_item_desc",
@@ -199,16 +201,15 @@ def default_scan_callback(entry, profile, plugin):
     if profile.filters:
         matched = False
         for filter in profile.filters:
-            # note: filters return None on error
+            # note: a filter returns None on error
             if filter.match(entry):
                 if not filter.inclusive:
                     return None
                 matched = True
                 break
 
-        # if at least one filter is specified, default behavior is to reject an
-        # entry if it did not match any of the specified filters
-        if not matched:
+        # apply default behavior if entry did not match any filter
+        if not matched and not profile.filters_default:
             return None
 
     if entry.is_dir():
@@ -576,6 +577,19 @@ class FilesCatalog(kp.Plugin):
                         'Error: {}').format(expression, section_name, str(exc)))
                     continue
             profdef['filters'] = tuple(profdef['filters']) # memory usage
+
+            # filters - define the default filtering behavior
+            # We stick to the following rules for that:
+            # * if *filters* is empty, default is to INCLUDE the entry
+            # * if *filters* contains only negative filters, default is to INCLUDE
+            #   the entry
+            # * in any other case, default is to EXCLUDE the item
+            profdef['filters_default'] = True # if empty or has negative
+            if profdef['filters']:
+                for flt in profdef['filters']:
+                    if flt.inclusive:
+                        profdef['filters_default'] = False
+                        break
 
             # trim_extensions
             # note: we do not use PATHEXT as a default because user may need to

@@ -43,24 +43,35 @@
 #    if not profile.include_files and not entry.is_dir():
 #        return None
 #
-#    for filter in profile.filters:
-#        if filter.match(entry):
-#            if not filter.inclusive:
-#                return None
-#            break
+#    if profile.filters:
+#        matched = False
+#        for filter in profile.filters:
+#            # note: a filter returns None on error
+#            if filter.match(entry):
+#                if not filter.inclusive:
+#                    return None
+#                matched = True
+#                break
+#
+#        # apply default behavior if entry did not match any filter
+#        if not matched and not profile.filters_default:
+#            return None
 #
 #    if entry.is_dir():
 #        item_label_tmpl = profile.dir_item_label
+#        item_desc_tmpl = profile.dir_item_desc
 #    else:
 #        item_label_tmpl = profile.file_item_label
+#        item_desc_tmpl = profile.file_item_desc
 #
 #    formatter = _LazyItemLabelFormatter(entry, profile, plugin)
-#    item_label = formatter.format(item_label_tmpl)
+#    item_label = formatter.format(item_label_tmpl, fallback=entry.name)
+#    item_desc = formatter.format(item_desc_tmpl, fallback="")
 #
 #    return plugin.create_item(
 #        category=kp.ItemCategory.FILE,
 #        label=item_label,
-#        short_desc="", # path is displayed on GUI if desc is empty
+#        short_desc=item_desc, # path is displayed on GUI if desc is empty
 #        target=entry.path,
 #        args_hint=kp.ItemArgsHint.ACCEPTED,
 #        hit_hint=kp.ItemHitHint.KEEPALL)
