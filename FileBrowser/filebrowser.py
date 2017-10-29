@@ -79,7 +79,10 @@ class FileBrowser(kp.Plugin):
         #
         #   os.path.isabs("\\\\server\\share\\file") == True
         #   os.path.ismount("\\\\server\\share\\file") == False
-        elif not items_chain and (
+        #
+        #   os.path.isabs("::") == False (OK)
+        #   os.path.ismount("::") == True (WRONG)
+        elif not items_chain and not user_input.startswith("::") and (
                 os.path.isabs(os.path.expandvars(user_input)) or
                 os.path.ismount(os.path.expandvars(user_input).rstrip(os.sep))): # rstrip() to avoid (1)
             user_input = os.path.expandvars(user_input)
