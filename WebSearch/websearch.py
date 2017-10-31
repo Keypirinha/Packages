@@ -3,6 +3,7 @@
 import keypirinha as kp
 import keypirinha_util as kpu
 import os.path
+import time
 import urllib.parse
 
 class WebSearch(kp.Plugin):
@@ -21,11 +22,13 @@ class WebSearch(kp.Plugin):
 
     DEFAULT_ITEM_LABEL_FORMAT = "WebSearch {site_name}"
     DEFAULT_ENABLE_PREDEFINED_SITES = True
+    DEFAULT_MULTI_URL_DELAY = 150
     DEFAULT_NEW_WINDOW = False
     DEFAULT_INCOGNITO = False
     DEFAULT_HISTORY_KEEP = kp.ItemHitHint.NOARGS
     DEFAULT_ARGS_QUOTING = "auto"
 
+    multi_url_delay = DEFAULT_MULTI_URL_DELAY
     default_icon_handle = None
     sites = {}
 
@@ -78,11 +81,15 @@ class WebSearch(kp.Plugin):
                 kpu.web_browser_command(
                     private_mode=site['incognito'], new_window=site['new_window'],
                     url=final_url, execute=True)
+                if len(site['urls']) > 1:
+                    time.sleep(self.multi_url_delay)
         else:
             for home_url in site['home_urls']:
                 kpu.web_browser_command(
                     private_mode=site['incognito'], new_window=site['new_window'],
                     url=home_url, execute=True)
+                if len(site['home_urls']) > 1:
+                    time.sleep(self.multi_url_delay)
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
@@ -168,6 +175,15 @@ class WebSearch(kp.Plugin):
             "enable_predefined_sites",
             section=self.CONFIG_SECTION_MAIN,
             fallback=self.DEFAULT_ENABLE_PREDEFINED_SITES)
+
+        self.multi_url_delay = settings.get_int(
+            "multi_url_delay",
+            section=self.CONFIG_SECTION_MAIN,
+            fallback=self.DEFAULT_MULTI_URL_DELAY,
+            min=49, max=2000)
+        if self.multi_url_delay <= 49:
+            self.multi_url_delay = 0
+        self.multi_url_delay /= 1000.0 # to seconds
 
         # read default values to be applied to the 'site' sections
         default_new_window = settings.get_bool(
