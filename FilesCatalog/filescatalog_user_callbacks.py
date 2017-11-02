@@ -31,11 +31,22 @@
 # No return value is expected from it.
 #
 # As an example, here is how a callback function could be implemented.
-# This code mimics the default callback implemented in filescatalog.py:
+# This code mimics the default callback (default_scan_callback) implemented in
+# filescatalog.py:
 #
 #import keypirinha as kp
 #
 #def my_callback(entry, profile, plugin):
+#    """
+#    *entry* is a `_globex.GlobExEntry` object, which is an improved version of
+#    `os.DirEntry`.
+#
+#    *profile* is a `namedtuple` defined in :file:`filescatalog.py` as
+#    ``ScanProfile``.
+#
+#    *plugin* is the `FilesCatalog` plugin object itself.
+#    """
+#
 #    if not profile.include_hidden and entry.is_hidden():
 #        return None
 #    if not profile.include_dirs and entry.is_dir():
@@ -43,19 +54,13 @@
 #    if not profile.include_files and not entry.is_dir():
 #        return None
 #
-#    if profile.filters:
-#        matched = False
-#        for filter in profile.filters:
-#            # note: a filter returns None on error
-#            if filter.match(entry):
-#                if not filter.inclusive:
-#                    return None
-#                matched = True
-#                break
-#
-#        # apply default behavior if entry did not match any filter
-#        if not matched and not profile.filters_default:
-#            return None
+#    include = profile.filters_default
+#    for filter in profile.filters:
+#        if filter.match(entry):
+#            include = filter.inclusive:
+#            break
+#    if not include:
+#        return None
 #
 #    if entry.is_dir():
 #        item_label_tmpl = profile.dir_item_label

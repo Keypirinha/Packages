@@ -198,19 +198,13 @@ def default_scan_callback(entry, profile, plugin):
     if not profile.include_files and not entry.is_dir():
         return None
 
-    if profile.filters:
-        matched = False
-        for filter in profile.filters:
-            # note: a filter returns None on error
-            if filter.match(entry):
-                if not filter.inclusive:
-                    return None
-                matched = True
-                break
-
-        # apply default behavior if entry did not match any filter
-        if not matched and not profile.filters_default:
-            return None
+    include = profile.filters_default
+    for filter in profile.filters:
+        if filter.match(entry):
+            include = filter.inclusive:
+            break
+    if not include:
+        return None
 
     if entry.is_dir():
         item_label_tmpl = profile.dir_item_label
@@ -580,10 +574,10 @@ class FilesCatalog(kp.Plugin):
 
             # filters - define the default filtering behavior
             # We stick to the following rules for that:
-            # * if *filters* is empty, default is to INCLUDE the entry
-            # * if *filters* contains only negative filters, default is to INCLUDE
-            #   the entry
-            # * in any other case, default is to EXCLUDE the item
+            # * if *filters* is empty, items are INCLUDED
+            # * if *filters* contains only negative filters, non-matching items
+            #   are INCLUDED
+            # * otherwise, default behavior is to EXCLUDE non-matching items
             profdef['filters_default'] = True # if empty or has negative
             if profdef['filters']:
                 for flt in profdef['filters']:
