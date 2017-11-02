@@ -57,7 +57,7 @@
 #    include = profile.filters_default
 #    for filter in profile.filters:
 #        if filter.match(entry):
-#            include = filter.inclusive:
+#            include = filter.inclusive
 #            break
 #    if not include:
 #        return None
