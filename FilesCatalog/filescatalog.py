@@ -570,7 +570,6 @@ class FilesCatalog(kp.Plugin):
                         'Ignoring invalid filter "{}" from "{}". ' +
                         'Error: {}').format(expression, section_name, str(exc)))
                     continue
-            profdef['filters'] = tuple(profdef['filters']) # memory usage
 
             # filters - define the default filtering behavior
             # We stick to the following rules for that:
@@ -584,6 +583,23 @@ class FilesCatalog(kp.Plugin):
                     if flt.inclusive:
                         profdef['filters_default'] = False
                         break
+
+            # filters - cleanup according to the rules stated above
+            # * this allows to optimize (speed) filtering
+            # * if filters list is not empty and contains mixed filters, we
+            #   can remove all the trailing negative filters if any
+            if not profdef['filters_default']: # if "non-empty and mixed filters"
+                count = 0
+                while profdef['filters'] and not profdef['filters'][-1].inclusive:
+                    profdef['filters'].pop()
+                    count += 1
+                if count:
+                    self.warn((
+                        'Ignoring trailing negative filter(s) from "{}". ' +
+                        'Read the inline documentation of the "filters" ' +
+                        'setting for more info').format(section_name))
+
+            profdef['filters'] = tuple(profdef['filters']) # memory usage
 
             # trim_extensions
             # note: we do not use PATHEXT as a default because user may need to
