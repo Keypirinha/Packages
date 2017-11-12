@@ -315,10 +315,15 @@ class Calc(kp.Plugin):
                 results = (results,)
             for res in results:
                 res = str(res)
+                short_desc="Press Enter to copy the result"
+                if res.startswith("0b"):
+                    tmp = res[2:]
+                    width = 0 if tmp == "0" else len(tmp)
+                    short_desc = "{}-bit wide ({})".format(width, short_desc)
                 suggestions.append(self.create_item(
                     category=kp.ItemCategory.EXPRESSION,
                     label="= " + res if not items_chain else res,
-                    short_desc="Press Enter to copy the result",
+                    short_desc=short_desc,
                     target=res,
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
                     hit_hint=kp.ItemHitHint.IGNORE))
