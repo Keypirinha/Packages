@@ -14,10 +14,12 @@ class TaskSwitcher(kp.Plugin):
 
     DEFAULT_ITEM_LABEL = "Switch To"
     DEFAULT_ALWAYS_SUGGEST = False
+    DEFAULT_PROC_NAME_FIRST = False
     KEYWORD = "switchto"
 
     item_label = DEFAULT_ITEM_LABEL
     always_suggest = DEFAULT_ALWAYS_SUGGEST
+    proc_name_first = DEFAULT_PROC_NAME_FIRST
 
     def __init__(self):
         super().__init__()
@@ -74,7 +76,10 @@ class TaskSwitcher(kp.Plugin):
             item_short_desc = "{}: {}".format(self.item_label, wnd_title)
             if proc_image is not None:
                 proc_name = os.path.splitext(os.path.basename(proc_image))[0]
-                item_label += " (" + proc_name + ")"
+                if self.proc_name_first:
+                    item_label = proc_name + ": " + item_label
+                else:
+                    item_label += " (" + proc_name + ")"
                 item_short_desc += " (" + proc_name + ")"
 
             # if user_input is empty, just match everything we get
@@ -114,6 +119,8 @@ class TaskSwitcher(kp.Plugin):
             "item_label", "main", self.DEFAULT_ITEM_LABEL)
         self.always_suggest = settings.get_bool(
             "always_suggest", "main", self.DEFAULT_ALWAYS_SUGGEST)
+        self.proc_name_first = settings.get_bool(
+            "proc_name_first", "main", self.DEFAULT_PROC_NAME_FIRST)
 
     def _create_keyword_item(self, label, short_desc):
         return self.create_item(
