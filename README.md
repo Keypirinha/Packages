@@ -36,3 +36,6 @@ license, which you can find in the `LICENSE` file located in this directory.
   - Patch to allow predefined searches in the `Everything` package
 * [@ueffel](https://github.com/ueffel):
   - Patch to add `Copy...` actions for the `RegBrowser` package
+* [@AngelEzquerra](https://github.com/AngelEzquerra):
+  - Patch to add TaskSwitcher option to show the process name before the task name
+  - Patch to add TaskSwitcher option to show the app icons
