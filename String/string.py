@@ -13,6 +13,8 @@ import traceback
 import urllib.parse
 import uuid
 import zlib
+import base64
+import binascii
 
 def i2xx(b, prefix):
     if not isinstance(b, int): raise TypeError
@@ -279,6 +281,30 @@ class _Functor_ZLib(_Functor):
         result = getattr(zlib, self.name)(data)
         return (i2xx(result, False), i2xx(result, True), str(result))
 
+class _Functor_Base64(_Functor):
+    def __init__(self):
+        super().__init__("base64", "Base64",
+                         "Encoding/decoding to printable ASCII characters")
+
+    def convert(self, data):
+        if isinstance(data, str):
+            data = data.encode()
+
+        encoded = base64.b64encode(data).decode()
+
+        results = [
+            {'label': encoded, 'target': encoded, 'desc': 'Encoded string'}
+        ]
+
+        try:
+            decoded = base64.b64decode(data).decode()
+        except (binascii.Error, UnicodeError):
+            pass
+        else:
+            results.append({'label': decoded, 'target': decoded, 'desc': 'Decoded string'})
+
+        return results
+
 
 class String(kp.Plugin):
     """
@@ -323,7 +349,8 @@ class String(kp.Plugin):
             _Functor_UrlSplit(),
             _Functor_UrlUnquote(),
             _Functor_ZLib("adler32"),
-            _Functor_ZLib("crc32")]
+            _Functor_ZLib("crc32"),
+            _Functor_Base64()]
 
         for algo in hashlib.algorithms_available:
             # some algorithms are declared twice in the list, like 'MD4' and

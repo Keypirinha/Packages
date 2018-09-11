@@ -32,6 +32,7 @@ license, which you can find in the `LICENSE` file located in this directory.
 * [@alexandr-san4ez](https://github.com/alexandr-san4ez):
   - Patch to add default item for the `WebSuggest` package
   - Patch to add `Cases` (change case) actions for the `String` package
+  - Patch to add `Base64` (encoding / decoding) actions for the `String` package
 * [@psistorm](https://github.com/psistorm):
   - Patch to allow predefined searches in the `Everything` package
 * [@ueffel](https://github.com/ueffel):
