@@ -3,13 +3,13 @@
 import decimal
 import operator
 
-class Number():
+class Number:
     """
     A flexible :py:class:`decimal.Decimal` class that allows the use of
-    "integer-only" operators like `__lshift__` when the represented number is
+    "integer-only" operators like `__lshift__` when the represented value is
     safely castable to an integer.
     """
-    __slots__ = ("_dec")
+    __slots__ = ("_dec", )
 
     def __init__(self, value="0", **kwargs):
         if isinstance(value, self.__class__):
@@ -61,8 +61,9 @@ class Number():
 
     # This default __getattr__() implementation is unsafe here since some
     # methods may require Decimal() input object(s) and might also return
-    # Decimal() object(s), which is what we are trying to avoid here.
-    # So unfortunately, we are doomed to interface the base method one by one...
+    # Decimal() object(s) where the caller would expect a Number().
+    # So unfortunately, we are doomed to interface the base methods one by
+    # one...
     #
     # def __getattr__(self, attr):
     #     return getattr(selv._dec, attr)
@@ -400,58 +401,56 @@ class Number():
 
 
 if __name__ == "__main__":
-    if not __debug__:
-        raise Exception("debug mode not enabled")
+    if __debug__:
+        N = Number
 
-    N = Number
+        assert repr(N("1.2")) == "Number('1.2')"
+        assert str(N("1.2")) == "1.2"
+        assert abs(N("1.2")) == N("1.2")
+        assert abs(N("-1.2")) == N("1.2")
+        assert "{}".format(N("-1.2")) == "-1.2"
 
-    assert repr(N("1.2")) == "Number('1.2')"
-    assert str(N("1.2")) == "1.2"
-    assert abs(N("1.2")) == N("1.2")
-    assert abs(N("-1.2")) == N("1.2")
-    assert "{}".format(N("-1.2")) == "-1.2"
+        assert N("0") == 0
+        assert N("0") == False
+        assert N("0") == .0
+        assert N("0") == -.0
+        assert N("0") == decimal.Decimal("-.0")
+        assert not N("0")
 
-    assert N("0") == 0
-    assert N("0") == False
-    assert N("0") == .0
-    assert N("0") == -.0
-    assert N("0") == decimal.Decimal("-.0")
-    assert not N("0")
+        assert 0 == N("0")
+        assert False == N("0")
+        assert .0 == N("0")
+        assert -.0 == N("0")
+        assert decimal.Decimal("-.0") == N("0")
 
-    assert 0 == N("0")
-    assert False == N("0")
-    assert .0 == N("0")
-    assert -.0 == N("0")
-    assert decimal.Decimal("-.0") == N("0")
+        assert N("-1") != 1
+        assert N("-1") != 1.0
+        assert N("-1") != True
+        assert not not N("-1")
+        assert N("-1") != False
 
-    assert N("-1") != 1
-    assert N("-1") != 1.0
-    assert N("-1") != True
-    assert not not N("-1")
-    assert N("-1") != False
+        assert .1 != N("0")
+        assert .1 > N("0")
+        assert .1 >= N("0")
+        assert N("0") < .1
+        assert N("0") <= .1
 
-    assert .1 != N("0")
-    assert .1 > N("0")
-    assert .1 >= N("0")
-    assert N("0") < .1
-    assert N("0") <= .1
+        assert -N("1.1") == -N("1.1")
+        assert -N("1.1") == N("-1.1")
 
-    assert -N("1.1") == -N("1.1")
-    assert -N("1.1") == N("-1.1")
+        assert (N("1.1") + N(".1")) == N("1.2")
+        assert (N("1.1") - N(".1")) == N("1.0")
+        assert (N("1.1") * 2) == N("2.2")
+        assert (N("1.1") / 2) == N(".55")
+        assert (N("1.1") ** 2) == N("1.21")
+        assert (N("1.0") ** N("2.3")) == 1
 
-    assert (N("1.1") + N(".1")) == N("1.2")
-    assert (N("1.1") - N(".1")) == N("1.0")
-    assert (N("1.1") * 2) == N("2.2")
-    assert (N("1.1") / 2) == N(".55")
-    assert (N("1.1") ** 2) == N("1.21")
-    assert (N("1.0") ** N("2.3")) == 1
+        assert (N("3") >> 1) == 1
+        assert (N("3") << 1) == 6
+        assert (N("3") & 2) == 2
+        assert (N("2") | 1) == N("3")
+        assert (N("2") | 0) == 2
 
-    assert (N("3") >> 1) == 1
-    assert (N("3") << 1) == 6
-    assert (N("3") & 2) == 2
-    assert (N("2") | 1) == N("3")
-    assert (N("2") | 0) == 2
-
-    n = N("3")
-    n >>= 1
-    assert n == 1
+        n = N("3")
+        n >>= 1
+        assert n == 1
