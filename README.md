@@ -33,10 +33,10 @@ license, which you can find in the `LICENSE` file located in this directory.
   - Patch to add default item for the `WebSuggest` package
   - Patch to add `Cases` (change case) actions for the `String` package
   - Patch to add `Base64` (encoding / decoding) actions for the `String` package
+* [@AngelEzquerra](https://github.com/AngelEzquerra):
+  - Patch to add the `proc_name_first` setting to the `TaskSwitcher` package
+  - Patch to add the `show_app_icons` setting to the `TaskSwitcher` package
 * [@psistorm](https://github.com/psistorm):
   - Patch to allow predefined searches in the `Everything` package
 * [@ueffel](https://github.com/ueffel):
   - Patch to add `Copy...` actions for the `RegBrowser` package
-* [@AngelEzquerra](https://github.com/AngelEzquerra):
-  - Patch to add TaskSwitcher option to show the process name before the task name
-  - Patch to add TaskSwitcher option to show the app icons

@@ -94,7 +94,8 @@ class TaskSwitcher(kp.Plugin):
                     against = self.item_label + " " + item_label
                 match_score = kpu.fuzzy_score(user_input, against)
             if match_score:
-                suggestion = self._create_keyword_item(self.item_label, item_short_desc, target=proc_image)
+                suggestion = self._create_keyword_item(
+                    self.item_label, item_short_desc, target=proc_image)
                 suggestion.set_args(str(hwnd), item_label)
                 suggestions.append(suggestion)
 
