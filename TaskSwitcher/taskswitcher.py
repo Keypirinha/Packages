@@ -14,10 +14,14 @@ class TaskSwitcher(kp.Plugin):
 
     DEFAULT_ITEM_LABEL = "Switch To"
     DEFAULT_ALWAYS_SUGGEST = False
+    DEFAULT_PROC_NAME_FIRST = False
+    DEFAULT_SHOW_APP_ICONS = True
     KEYWORD = "switchto"
 
     item_label = DEFAULT_ITEM_LABEL
     always_suggest = DEFAULT_ALWAYS_SUGGEST
+    proc_name_first = DEFAULT_PROC_NAME_FIRST
+    show_app_icons = DEFAULT_SHOW_APP_ICONS
 
     def __init__(self):
         super().__init__()
@@ -74,7 +78,11 @@ class TaskSwitcher(kp.Plugin):
             item_short_desc = "{}: {}".format(self.item_label, wnd_title)
             if proc_image is not None:
                 proc_name = os.path.splitext(os.path.basename(proc_image))[0]
-                item_label += " (" + proc_name + ")"
+                if self.proc_name_first:
+                    item_label = proc_name + ": " + item_label
+                    #item_short_desc = proc_name + ": " + item_short_desc
+                else:
+                    item_label += " (" + proc_name + ")"
                 item_short_desc += " (" + proc_name + ")"
 
             # if user_input is empty, just match everything we get
@@ -86,7 +94,7 @@ class TaskSwitcher(kp.Plugin):
                     against = self.item_label + " " + item_label
                 match_score = kpu.fuzzy_score(user_input, against)
             if match_score:
-                suggestion = self._create_keyword_item(self.item_label, item_short_desc)
+                suggestion = self._create_keyword_item(self.item_label, item_short_desc, target=proc_image)
                 suggestion.set_args(str(hwnd), item_label)
                 suggestions.append(suggestion)
 
@@ -94,9 +102,7 @@ class TaskSwitcher(kp.Plugin):
             self.set_suggestions(suggestions)
 
     def on_execute(self, item, action):
-        if (item
-                and item.category() == kp.ItemCategory.KEYWORD
-                and item.target() == self.KEYWORD):
+        if item:
             try:
                 hwnd = int(item.raw_args())
             except (TypeError, ValueError):
@@ -114,12 +120,23 @@ class TaskSwitcher(kp.Plugin):
             "item_label", "main", self.DEFAULT_ITEM_LABEL)
         self.always_suggest = settings.get_bool(
             "always_suggest", "main", self.DEFAULT_ALWAYS_SUGGEST)
+        self.proc_name_first = settings.get_bool(
+            "proc_name_first", "main", self.DEFAULT_PROC_NAME_FIRST)
+        self.show_app_icons = settings.get_bool(
+            "show_app_icons", "main", self.DEFAULT_SHOW_APP_ICONS)
 
-    def _create_keyword_item(self, label, short_desc):
+    def _create_keyword_item(self, label, short_desc, target=KEYWORD):
+        # By using the FILE category Keypirinha will automatically
+        # use the icon corresponding to the target file (which we
+        # set to the executable corresponding to the selected task)
+        category = kp.ItemCategory.FILE
+        if not self.show_app_icons or not target or not os.path.exists(target):
+            category = kp.ItemCategory.KEYWORD
+            target = self.KEYWORD
         return self.create_item(
-            category=kp.ItemCategory.KEYWORD,
+            category=category,
             label=label,
             short_desc=short_desc,
-            target=self.KEYWORD,
+            target=target,
             args_hint=kp.ItemArgsHint.REQUIRED,
             hit_hint=kp.ItemHitHint.NOARGS)
