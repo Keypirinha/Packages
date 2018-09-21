@@ -3,6 +3,9 @@
 This is [Keypirinha](http://keypirinha.com) launcher's Official Packages
 repository.
 
+You can find Keypirinha's [Python Lib](https://github.com/Keypirinha/PythonLib)
+in its own repository.
+
 ## Report an issue
 
 Issues must be reported to [application's issue tracker][app_issues].
