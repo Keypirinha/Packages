@@ -79,15 +79,10 @@ class GoogleTranslate(kp.Plugin):
                 name=self.ACTION_COPY_URL,
                 label="Copy URL",
                 short_desc="Copy resulting URL to clipboard")]
-        self.set_actions(self.ITEMCAT_TRANSLATE, actions)
+        self.set_actions(self.ITEMCAT_RESULT, actions)
 
     def on_catalog(self):
         catalog = self._read_config()
-
-        if self.default_item_enabled:
-            catalog.insert(0, self._create_translate_item(
-                label=self.default_item_label))
-
         self.set_catalog(catalog)
 
     def on_suggest(self, user_input, items_chain):
@@ -98,7 +93,7 @@ class GoogleTranslate(kp.Plugin):
 
         # read query args from current item, if any
         # then override item's query args with user_input if needed
-        query = self._parse_and_merge_input(current_item, user_input)
+        query = self._extract_search_info(current_item, user_input)
 
         # query google translate if needed
         if query['lang_in'] and query['lang_out'] and len(query['terms']):
@@ -149,7 +144,7 @@ class GoogleTranslate(kp.Plugin):
                                         self.ACTION_BROWSE_PRIVATE,
                                         self.ACTION_COPY_URL):
             # build the url and its arguments
-            query = self._parse_and_merge_input(item)
+            query = self._extract_search_info(item)
             url = self._build_browse_url(query['lang_in'], query['lang_out'],
                                          query['terms'])
 
@@ -168,7 +163,8 @@ class GoogleTranslate(kp.Plugin):
 
         # default action: copy result (ACTION_COPY_RESULT)
         else:
-            kpu.set_clipboard(item.target())
+            query = self._extract_search_info(item)
+            kpu.set_clipboard(query['result'])
 
     def on_events(self, flags):
         if flags & (kp.Events.APPCONFIG | kp.Events.PACKCONFIG |
@@ -189,7 +185,7 @@ class GoogleTranslate(kp.Plugin):
                 "Skipping custom item.")
             self.warn(fmt.format(name, section))
 
-        custom_items = []
+        catalog = []
 
         settings = self.load_settings()
 
@@ -232,6 +228,10 @@ class GoogleTranslate(kp.Plugin):
         self.idle_time = settings.get_float(
             "idle_time", self.CONFIG_SECTION_DEFAULTS,
             fallback=self.DEFAULT_IDLE_TIME, min=0.25, max=3)
+
+        if self.default_item_enabled:
+            catalog.insert(0, self._create_translate_item(
+                label=self.default_item_label))
 
         # [default_item/*] optional sections
         for section in settings.sections():
@@ -285,12 +285,12 @@ class GoogleTranslate(kp.Plugin):
                 continue
 
             # create item
-            custom_items.append(self._create_translate_item(
+            catalog.append(self._create_translate_item(
                 label=custitem_label,
                 lang_in=custitem_lang_in,
                 lang_out=custitem_lang_out))
 
-        return custom_items
+        return catalog
 
     def _parse_api_response(self, response, query_lang_in):
         # example:
@@ -323,11 +323,12 @@ class GoogleTranslate(kp.Plugin):
 
         return ({'result': res, 'lang_in': lang_in} for res in translated)
 
-    def _parse_and_merge_input(self, item, user_input=None):
-        query = {
+    def _extract_search_info(self, item, user_input=None):
+        info = {
             'lang_in': self.default_lang_in,
             'lang_out': self.default_lang_out,
-            'terms': ""}
+            'terms': "",
+            'result': ""}
 
         # parse item's target
         if item and item.category() == self.ITEMCAT_TRANSLATE:
@@ -335,57 +336,77 @@ class GoogleTranslate(kp.Plugin):
 
             # lang_in
             if len(item_props) >= 1:
-                query['lang_in'] = self._match_lang_code(
-                    "in", item_props[0], fallback=query['lang_in'])
+                info['lang_in'] = self._match_lang_code(
+                    "in", item_props[0], fallback=info['lang_in'])
 
             # lang_out
             if len(item_props) >= 2:
-                query['lang_out'] = self._match_lang_code(
-                    "out", item_props[1], fallback=query['lang_out'])
+                info['lang_out'] = self._match_lang_code(
+                    "out", item_props[1], fallback=info['lang_out'])
 
             # search terms
             if len(item.raw_args()):
-                query['terms'] = item.raw_args()
+                info['terms'] = item.raw_args()
 
-        # parse user input
-        # * supported formats:
-        #     [[lang_in]:[lang_out]] <terms>
-        #     <terms> [[lang_in]:[lang_out]]
-        # * in the unlikely case the [[lang_in]:[lang_out]] part is specified at
-        #   both ends, the one at the right end prevails
-        if user_input:
-            user_input = user_input.lstrip()
-            query['terms'] = user_input.rstrip()
+            # parse user input
+            # * supported formats:
+            #     [[lang_in]:[lang_out]] <terms>
+            #     <terms> [[lang_in]:[lang_out]]
+            # * in the unlikely case the [[lang_in]:[lang_out]] part is
+            #   specified at both ends, the one at the right end prevails
+            if user_input:
+                user_input = user_input.lstrip()
+                info['terms'] = user_input.rstrip()
 
-            # match: <terms> [[lang_in]:[lang_out]]
-            m = re.match(
-                (r"^(?P<terms>.*)\s+" +
-                    r"(?P<lang_in>[a-zA-Z\-]+)?" +
-                    re.escape(self.ITEM_ARGS_SEP) +
-                    r"(?P<lang_out>[a-zA-Z\-]+)?$"),
-                user_input)
-
-            # match: [[lang_in]:[lang_out]] <terms>
-            if not m:
+                # match: <terms> [[lang_in]:[lang_out]]
                 m = re.match(
-                    (r"^(?P<lang_in>[a-zA-Z\-]+)?" +
+                    (r"^(?P<terms>.*)\s+" +
+                        r"(?P<lang_in>[a-zA-Z\-]+)?" +
                         re.escape(self.ITEM_ARGS_SEP) +
-                        r"(?P<lang_out>[a-zA-Z\-]+)?" +
-                        r"\s+(?P<terms>.*)$"),
+                        r"(?P<lang_out>[a-zA-Z\-]+)?$"),
                     user_input)
 
-            if m:
-                if m.group("lang_in") or m.group("lang_out"):
-                    lang_in = self._match_lang_code("in", m.group("lang_in"))
-                    lang_out = self._match_lang_code("out", m.group("lang_out"))
-                    if lang_in or lang_out:
-                        if lang_in:
-                            query['lang_in'] = lang_in
-                        if lang_out:
-                            query['lang_out'] = lang_out
-                        query['terms'] = m.group("terms").rstrip()
+                # match: [[lang_in]:[lang_out]] <terms>
+                if not m:
+                    m = re.match(
+                        (r"^(?P<lang_in>[a-zA-Z\-]+)?" +
+                            re.escape(self.ITEM_ARGS_SEP) +
+                            r"(?P<lang_out>[a-zA-Z\-]+)?" +
+                            r"\s+(?P<terms>.*)$"),
+                        user_input)
 
-        return query
+                if m:
+                    if m.group("lang_in") or m.group("lang_out"):
+                        lang_in = self._match_lang_code("in", m.group("lang_in"))
+                        lang_out = self._match_lang_code("out", m.group("lang_out"))
+                        if lang_in or lang_out:
+                            if lang_in:
+                                info['lang_in'] = lang_in
+                            if lang_out:
+                                info['lang_out'] = lang_out
+                            info['terms'] = m.group("terms").rstrip()
+
+        elif item and item.category() == self.ITEMCAT_RESULT:
+            item_props = item.data_bag().split(self.ITEM_ARGS_SEP, maxsplit=2)
+
+            # lang_in
+            if len(item_props) >= 1:
+                info['lang_in'] = self._match_lang_code(
+                    "in", item_props[0], fallback=info['lang_in'])
+
+            # lang_out
+            if len(item_props) >= 2:
+                info['lang_out'] = self._match_lang_code(
+                    "out", item_props[1], fallback=info['lang_out'])
+
+            # search terms
+            if len(item_props) >= 3:
+                info['terms'] = item_props[2]
+
+            # search result
+            info['result'] = item.target()
+
+        return info
 
     def _lang_name(self, inout, lang_code):
         match_code = self._match_lang_code(inout, lang_code)
@@ -464,7 +485,7 @@ class GoogleTranslate(kp.Plugin):
             label=search_result if search_result else "",
             short_desc=short_desc,
             target=search_result if search_result else "",
-            args_hint=kp.ItemArgsHint.REQUIRED,
+            args_hint=kp.ItemArgsHint.FORBIDDEN,
             hit_hint=kp.ItemHitHint.IGNORE)
 
         data_bag = lang_in + self.ITEM_ARGS_SEP + lang_out + self.ITEM_ARGS_SEP
