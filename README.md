@@ -41,6 +41,8 @@ license, which you can find in the `LICENSE` file located in this directory.
   - Patch to add the `show_app_icons` setting to the `TaskSwitcher` package
 * [@psistorm](https://github.com/psistorm):
   - Patch to allow predefined searches in the `Everything` package
+* [@ckolumbus](https://github.com/ckolumbus):
+  - Add [Buku](https://github.com/jarun/Buku/) support to `Bookmarks` package
 * [@ueffel](https://github.com/ueffel):
   - Patch to add `Copy...` actions for the `RegBrowser` package
 * [@DrorHarari](https://github.com/DrorHarari):
