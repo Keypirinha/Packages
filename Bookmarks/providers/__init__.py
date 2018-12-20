@@ -6,3 +6,4 @@ from .firefox import FirefoxProvider
 from .iexplorer import InternetExplorerProvider
 from .iridium import IridiumProvider
 from .vivaldi import VivaldiProvider
+from .shaarli import ShaarliProvider
