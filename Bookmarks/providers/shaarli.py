@@ -4,7 +4,7 @@
 import keypirinha_net as kpn
 import urllib
 import json
-from .jwt import encode
+from .lib.jwt import encode
 import calendar, time
 import os.path
 import configparser
