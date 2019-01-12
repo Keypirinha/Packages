@@ -9,6 +9,10 @@ import tokenize
 import math
 import random
 import traceback
+import os
+import re
+import json
+import keyword
 from .lib.number import Number
 from .lib import simpleeval
 
@@ -103,6 +107,75 @@ def _safe_math_gcd(a, b):
 def _safe_math_sqrt(x):
     return Number(x).sqrt()
 
+class CalcVarHandler:
+    SAVE_VAR_PARSER = r'(?P<expression>[^:]+):\s*(?P<save_to_var>[a-zA-Z][a-zA-Z0-9]*)\s*$'
+    VAR_CACHE_FILE  = "variables.json"
+    calc_vars = {}
+    save_to_var = None
+
+    def __init__(self, plugin, constants):
+        self.plugin = plugin
+        self.constants = constants.copy()
+        self.save_var_parser = re.compile(self.SAVE_VAR_PARSER)
+        cache_path = self.plugin.get_package_cache_path(create=True)
+        self.var_cache_file = os.path.join(cache_path, self.VAR_CACHE_FILE)
+
+    def validate_vars(self):
+        forbidden = set()
+        for v in self.calc_vars.keys(): # Can't override constants/keywords
+            if v in self.constants or v in keyword.kwlist:
+                forbidden.add(v)
+        for v in forbidden:
+                self.calc_vars.pop(v)
+
+    def load_vars(self):
+        if os.path.exists(self.var_cache_file):
+            try:
+                with open(self.var_cache_file) as f:
+                    self.calc_vars = json.load(f)
+                    self.validate_vars()
+            except Exception as e:
+                self.plugin.err(f"Error loading variables file '{self.var_cache_file}'. {e}")
+
+    def vars(self):
+        return self.calc_vars.copy().items()#.update(self.constants)
+
+    def save_if_var(self, ans):
+        if not self.save_to_var:
+            return
+
+        self.calc_vars[self.save_to_var] = ans
+        self.save()
+
+    def save(self):
+        self.validate_vars()
+        try:
+            with open(self.var_cache_file, 'w') as f:
+                json.dump(self.calc_vars, f)
+        except Exception as e:
+            self.plugin.err(f"Error saving variables file '{self.var_cache_file}'. {e}")
+
+    def extract_save_to_var(self, user_input):
+        self.save_to_var = None
+        save_var_match = self.save_var_parser.match(user_input)
+        if not save_var_match:
+            return user_input
+
+        self.save_to_var = save_var_match["save_to_var"]
+        if self.save_to_var in self.constants.keys():
+            raise Exception('A constant value cannot be overriden.')
+        if self.save_to_var in keyword.kwlist:
+            raise Exception('A Python keyword cannot be used as variable.')
+        return save_var_match["expression"]
+
+    def update_calc_vars(self, own_names):
+        own_names.update(self.calc_vars)
+
+    def drop_var(self, var):
+        if var in self.calc_vars:
+            self.calc_vars.pop(var)
+            self.save()
+
 class _safe_mathfunc_args2float():
     __slots__ = ('_func')
 
@@ -113,14 +186,14 @@ class _safe_mathfunc_args2float():
         converted_args = [Number(a).__float__() for a in args]
         return self._func(*converted_args, **kwargs)
 
-
 class Calc(kp.Plugin):
     """
     Inline calculator.
 
     Evaluates a mathematical expression and shows its result.
     """
-
+    ITEMCAT_VARS = kp.ItemCategory.USER_BASE + 1
+    VARS_KEYWORD = "Calc: Variables"
     DEFAULT_KEYWORD = "="
     DEFAULT_ALWAYS_EVALUATE = True
     DEFAULT_ROUNDING_PRECISION = 5
@@ -277,18 +350,40 @@ class Calc(kp.Plugin):
             self.MATH_OPERATORS[ast.FloorDiv] = simpleeval.op.floordiv
 
     def on_start(self):
+        self.var_handler = CalcVarHandler(self, self.MATH_CONSTANTS)
         self._read_config()
 
     def on_catalog(self):
-        self.set_catalog([self.create_item(
-            category=kp.ItemCategory.KEYWORD,
-            label=self.DEFAULT_KEYWORD,
-            short_desc="Evaluate a mathematical expression",
-            target=self.DEFAULT_KEYWORD,
-            args_hint=kp.ItemArgsHint.REQUIRED,
-            hit_hint=kp.ItemHitHint.NOARGS)])
+        self.set_catalog([
+            self.create_item(
+                category=kp.ItemCategory.KEYWORD,
+                label=self.DEFAULT_KEYWORD,
+                short_desc="Evaluate a mathematical expression",
+                target=self.DEFAULT_KEYWORD,
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.NOARGS),
+            self.create_item(
+                category=self.ITEMCAT_VARS,
+                label=self.VARS_KEYWORD,
+                short_desc="Display Calc variables",
+                target=self.VARS_KEYWORD,
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.NOARGS)])
 
     def on_suggest(self, user_input, items_chain):
+        if items_chain and items_chain[0].category() == self.ITEMCAT_VARS:
+            suggestions = []
+            for i,(var,val) in enumerate(self.var_handler.vars()):
+                suggestions.append(self.create_item(
+                    category=kp.ItemCategory.EXPRESSION,#self.ITEMCAT_VARS,
+                    label=f"{var} = {val}",
+                    short_desc="Press Enter to copy the result",
+                    target=str(val),
+                    args_hint=kp.ItemArgsHint.FORBIDDEN,
+                    hit_hint=kp.ItemHitHint.IGNORE))
+            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.LABEL_ASC)
+            return
+
         if not len(user_input):
             return
         if items_chain and (
@@ -310,6 +405,8 @@ class Calc(kp.Plugin):
 
         suggestions = []
         try:
+            user_input = self.var_handler.extract_save_to_var(user_input)
+
             results = self._eval(user_input)
             if not isinstance(results, (tuple, list)):
                 results = (results,)
@@ -339,6 +436,7 @@ class Calc(kp.Plugin):
     def on_execute(self, item, action):
         if item and item.category() == kp.ItemCategory.EXPRESSION:
             kpu.set_clipboard(item.target())
+            self.var_handler.save_if_var(self.ans)
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
@@ -346,6 +444,7 @@ class Calc(kp.Plugin):
 
     def _read_config(self):
         settings = self.load_settings()
+        self.var_handler.load_vars()
 
         # [main] always_evaluate
         self.always_evaluate = settings.get_bool(
@@ -480,6 +579,7 @@ class Calc(kp.Plugin):
         # Prepare the 'names' dictionary
         own_names = self.MATH_CONSTANTS
         own_names['ans'] = self.ans
+        self.var_handler.update_calc_vars(own_names)
 
         # Evaluate the expression
         # We bypass the SimpleEval.eval() method only for the sake of having a
