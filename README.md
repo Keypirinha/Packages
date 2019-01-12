@@ -43,3 +43,5 @@ license, which you can find in the `LICENSE` file located in this directory.
   - Patch to allow predefined searches in the `Everything` package
 * [@ueffel](https://github.com/ueffel):
   - Patch to add `Copy...` actions for the `RegBrowser` package
+* [@DrorHarari](https://github.com/DrorHarari):
+  - Patch to add string reverse and camel-like case changes to the `String` package
