@@ -108,15 +108,15 @@ def _safe_math_sqrt(x):
     return Number(x).sqrt()
 
 class CalcVarHandler:
-    SAVE_VAR_PARSER = r'(?P<expression>[^:]+):\s*(?P<save_to_var>[a-zA-Z][a-zA-Z0-9]*)\s*$'
+    SAVE_VAR_PARSER = r'(?P<expression>[^:]+):\s*(?P<var_to_save>[a-zA-Z][a-zA-Z0-9]*)\s*$'
     VAR_CACHE_FILE  = "variables.json"
+    DEFAULT_SAVE_CHAR = ":"
     calc_vars = {}
-    save_to_var = None
+    var_to_save = None
 
     def __init__(self, plugin, constants):
         self.plugin = plugin
         self.constants = constants.copy()
-        self.save_var_parser = re.compile(self.SAVE_VAR_PARSER)
         cache_path = self.plugin.get_package_cache_path(create=True)
         self.var_cache_file = os.path.join(cache_path, self.VAR_CACHE_FILE)
 
@@ -128,7 +128,23 @@ class CalcVarHandler:
         for v in forbidden:
                 self.calc_vars.pop(v)
 
-    def load_vars(self):
+    def valid_save_char(self, save_char):
+        if len(save_char) != 1 or  save_char.isalnum():
+            return False
+        # This check is valid with Python 3.7.0 but not with 3.6.7 (current Keypirinha)
+        #elif save_char != re.escape(save_char):
+        #    return False
+        else:
+            return True
+
+    def load_vars(self, settings):
+        save_char = settings.get_stripped("save_char", "main", self.DEFAULT_SAVE_CHAR)
+        if not self.valid_save_char(save_char):
+            self.plugin.warn(f"The character(s) '{save_char}' cannot be used for save_char.")
+            save_char = self.DEFAULT_SAVE_CHAR
+        save_var_parser = self.SAVE_VAR_PARSER.replace(self.DEFAULT_SAVE_CHAR, save_char)
+        self.save_var_parser = re.compile(save_var_parser)
+
         if os.path.exists(self.var_cache_file):
             try:
                 with open(self.var_cache_file) as f:
@@ -141,10 +157,10 @@ class CalcVarHandler:
         return self.calc_vars.copy().items()#.update(self.constants)
 
     def save_if_var(self, ans):
-        if not self.save_to_var:
+        if not self.var_to_save:
             return
 
-        self.calc_vars[self.save_to_var] = ans
+        self.calc_vars[self.var_to_save] = ans
         self.save()
 
     def save(self):
@@ -155,23 +171,23 @@ class CalcVarHandler:
         except Exception as e:
             self.plugin.err(f"Error saving variables file '{self.var_cache_file}'. {e}")
 
-    def extract_save_to_var(self, user_input):
-        self.save_to_var = None
+    def extract_var_to_save(self, user_input):
+        self.var_to_save = None
         save_var_match = self.save_var_parser.match(user_input)
         if not save_var_match:
             return user_input
 
-        self.save_to_var = save_var_match["save_to_var"]
-        if self.save_to_var in self.constants.keys():
+        self.var_to_save = save_var_match["var_to_save"]
+        if self.var_to_save in self.constants.keys():
             raise Exception('A constant value cannot be overriden.')
-        if self.save_to_var in keyword.kwlist:
+        if self.var_to_save in keyword.kwlist:
             raise Exception('A Python keyword cannot be used as variable.')
         return save_var_match["expression"]
 
     def update_calc_vars(self, own_names):
         own_names.update(self.calc_vars)
 
-    def drop_var(self, var):
+    def delete_var(self, var):
         if var in self.calc_vars:
             self.calc_vars.pop(var)
             self.save()
@@ -192,7 +208,7 @@ class Calc(kp.Plugin):
 
     Evaluates a mathematical expression and shows its result.
     """
-    ITEMCAT_VARS = kp.ItemCategory.USER_BASE + 1
+    ITEMCAT_VAR = kp.ItemCategory.USER_BASE + 1
     VARS_KEYWORD = "Calc: Variables"
     DEFAULT_KEYWORD = "="
     DEFAULT_ALWAYS_EVALUATE = True
@@ -352,6 +368,16 @@ class Calc(kp.Plugin):
     def on_start(self):
         self.var_handler = CalcVarHandler(self, self.MATH_CONSTANTS)
         self._read_config()
+        self.set_actions(self.ITEMCAT_VAR, [
+            self.create_action(
+                name="copy",
+                label="Copy",
+                short_desc="Press Enter to copy this varible"),
+            self.create_action(
+                name="delete",
+                label="Delete",
+                short_desc="Press Enter to delete this variable")
+        ])
 
     def on_catalog(self):
         self.set_catalog([
@@ -363,7 +389,7 @@ class Calc(kp.Plugin):
                 args_hint=kp.ItemArgsHint.REQUIRED,
                 hit_hint=kp.ItemHitHint.NOARGS),
             self.create_item(
-                category=self.ITEMCAT_VARS,
+                category=self.ITEMCAT_VAR,
                 label=self.VARS_KEYWORD,
                 short_desc="Display Calc variables",
                 target=self.VARS_KEYWORD,
@@ -371,16 +397,17 @@ class Calc(kp.Plugin):
                 hit_hint=kp.ItemHitHint.NOARGS)])
 
     def on_suggest(self, user_input, items_chain):
-        if items_chain and items_chain[0].category() == self.ITEMCAT_VARS:
+        if items_chain and items_chain[0].category() == self.ITEMCAT_VAR:
             suggestions = []
             for i,(var,val) in enumerate(self.var_handler.vars()):
                 suggestions.append(self.create_item(
-                    category=kp.ItemCategory.EXPRESSION,#self.ITEMCAT_VARS,
+                    category=self.ITEMCAT_VAR,
                     label=f"{var} = {val}",
                     short_desc="Press Enter to copy the result",
                     target=str(val),
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
-                    hit_hint=kp.ItemHitHint.IGNORE))
+                    hit_hint=kp.ItemHitHint.IGNORE,
+                    data_bag = var))
             self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.LABEL_ASC)
             return
 
@@ -405,7 +432,7 @@ class Calc(kp.Plugin):
 
         suggestions = []
         try:
-            user_input = self.var_handler.extract_save_to_var(user_input)
+            user_input = self.var_handler.extract_var_to_save(user_input)
 
             results = self._eval(user_input)
             if not isinstance(results, (tuple, list)):
@@ -437,6 +464,11 @@ class Calc(kp.Plugin):
         if item and item.category() == kp.ItemCategory.EXPRESSION:
             kpu.set_clipboard(item.target())
             self.var_handler.save_if_var(self.ans)
+        elif item and (item.category() == self.ITEMCAT_VAR):
+            if action.name() == "copy":
+                kpu.set_clipboard(item.target())
+            elif action.name() == "delete":
+                self.var_handler.delete_var(item.data_bag())
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
@@ -444,7 +476,7 @@ class Calc(kp.Plugin):
 
     def _read_config(self):
         settings = self.load_settings()
-        self.var_handler.load_vars()
+        self.var_handler.load_vars(settings)
 
         # [main] always_evaluate
         self.always_evaluate = settings.get_bool(
