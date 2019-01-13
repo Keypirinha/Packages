@@ -107,6 +107,16 @@ def _safe_math_gcd(a, b):
 def _safe_math_sqrt(x):
     return Number(x).sqrt()
 
+class _safe_mathfunc_args2float():
+    __slots__ = ('_func')
+
+    def __init__(self, func):
+        self._func = func
+
+    def __call__(self, *args, **kwargs):
+        converted_args = [Number(a).__float__() for a in args]
+        return self._func(*converted_args, **kwargs)
+
 class CalcVarHandler:
     SAVE_VAR_PARSER = r'(?P<expression>[^:]+):\s*(?P<var_to_save>[a-zA-Z][a-zA-Z0-9]*)\s*$'
     VAR_CACHE_FILE  = "variables.json"
@@ -159,7 +169,8 @@ class CalcVarHandler:
     def save_if_var(self, ans):
         if not self.var_to_save:
             return
-
+        if isinstance(ans, Number):
+            ans = ans.__float__()
         self.calc_vars[self.var_to_save] = ans
         self.save()
 
@@ -191,16 +202,6 @@ class CalcVarHandler:
         if var in self.calc_vars:
             self.calc_vars.pop(var)
             self.save()
-
-class _safe_mathfunc_args2float():
-    __slots__ = ('_func')
-
-    def __init__(self, func):
-        self._func = func
-
-    def __call__(self, *args, **kwargs):
-        converted_args = [Number(a).__float__() for a in args]
-        return self._func(*converted_args, **kwargs)
 
 class Calc(kp.Plugin):
     """
