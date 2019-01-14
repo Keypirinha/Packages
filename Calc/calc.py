@@ -118,8 +118,9 @@ class _safe_mathfunc_args2float():
         return self._func(*converted_args, **kwargs)
 
 class CalcVarHandler:
-    SAVE_VAR_PARSER = r'(?P<expression>[^:]+):\s*(?P<var_to_save>[a-zA-Z][a-zA-Z0-9]*)\s*$'
-    VAR_CACHE_FILE  = "variables.json"
+    SAVE_VAR_PARSER   = r'(?P<expression>[^{}]+){}\s*(?P<var_to_save>[a-zA-Z][a-zA-Z0-9]*)\s*$'
+    VAR_CACHE_FILE    = "variables.json"
+    VALID_SAVE_CHARS  = { ":": ":", ">": ">", "@": "@", "#": "#", "$": r"\$" }
     DEFAULT_SAVE_CHAR = ":"
     calc_vars = {}
     var_to_save = None
@@ -138,22 +139,16 @@ class CalcVarHandler:
         for v in forbidden:
                 self.calc_vars.pop(v)
 
-    def valid_save_char(self, save_char):
-        if len(save_char) != 1 or  save_char.isalnum():
-            return False
-        # This check is valid with Python 3.7.0 but not with 3.6.7 (current Keypirinha)
-        #elif save_char != re.escape(save_char):
-        #    return False
-        else:
-            return True
+    def prepare_save_var_parser(self, settings):
+        save_char = settings.get_stripped("save_char", "main", self.DEFAULT_SAVE_CHAR)
+        if not save_char in self.VALID_SAVE_CHARS.keys() or len(save_char) != 1:
+            save_char = self.DEFAULT_SAVE_CHAR
+
+        regex = self.SAVE_VAR_PARSER.format(save_char, self.VALID_SAVE_CHARS[save_char])
+        self.save_var_parser = re.compile(regex)
 
     def load_vars(self, settings):
-        save_char = settings.get_stripped("save_char", "main", self.DEFAULT_SAVE_CHAR)
-        if not self.valid_save_char(save_char):
-            self.plugin.warn(f"The character(s) '{save_char}' cannot be used for save_char.")
-            save_char = self.DEFAULT_SAVE_CHAR
-        save_var_parser = self.SAVE_VAR_PARSER.replace(self.DEFAULT_SAVE_CHAR, save_char)
-        self.save_var_parser = re.compile(save_var_parser)
+        self.prepare_save_var_parser(settings)
 
         if os.path.exists(self.var_cache_file):
             try:
@@ -466,9 +461,9 @@ class Calc(kp.Plugin):
             kpu.set_clipboard(item.target())
             self.var_handler.save_if_var(self.ans)
         elif item and (item.category() == self.ITEMCAT_VAR):
-            if action.name() == "copy":
+            if action and action.name() == "copy":
                 kpu.set_clipboard(item.target())
-            elif action.name() == "delete":
+            elif action and action.name() == "delete":
                 self.var_handler.delete_var(item.data_bag())
 
     def on_events(self, flags):
