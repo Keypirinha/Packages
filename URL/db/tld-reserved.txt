@@ -1,0 +1,6 @@
+# TLDs reserved for testing and development
+# See: https://tools.ietf.org/html/rfc2606#page-2
+EXAMPLE
+INVALID
+LOCALHOST
+TEST
