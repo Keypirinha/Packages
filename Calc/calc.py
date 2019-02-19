@@ -98,7 +98,7 @@ def _safe_math_gcd(a, b):
     if safe_a == 0 and safe_b == 0:
         return 0
     else:
-        return math.gcd(safe_a.__float__(), safe_b.__float__())
+        return math.gcd(safe_a.safe_int(), safe_b.safe_int())
 
 def _safe_math_sqrt(x):
     return Number(x).sqrt()
