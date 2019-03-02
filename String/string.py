@@ -15,6 +15,8 @@ import uuid
 import zlib
 import base64
 import binascii
+import re
+import unicodedata
 
 def i2xx(b, prefix):
     if not isinstance(b, int): raise TypeError
@@ -72,7 +74,11 @@ class _Functor_CaseConversion(_Functor):
         ("upper", "Upper Case"),
         ("capitalize", "Capitalized"),
         ("title", "Title Case"),
-        ("swapcase", "Swapped Case"))
+        ("swapcase", "Swapped Case"),
+        ("uppercamelcase", "Upper Camel Case"),
+        ("lowercamelcase", "Lower Camel Case"),
+        ("kebabcase", "Kebab Case"),
+        ("snakecase", "Snake Case"))
 
     def __init__(self):
         super().__init__("case_convert", "Case Conversion",
@@ -100,12 +106,39 @@ class _Functor_CaseConversion(_Functor):
 
         results = []
         for (algo, desc) in self._algorithms:
-            value = getattr(data, algo)()
+            value = getattr(data, algo)() if hasattr(data, algo) else getattr(self, algo)(data)
             if value not in targets:
                 targets.add(value)
                 results.append({'label': value, 'target': value, 'desc': desc})
 
         return results
+
+    # Upper camel casing converts above_average to AboveAverage
+    def uppercamelcase(self, data):
+        splits = re.split(r'[-_]+', data)
+        return data if len(splits) < 1 else "".join([s.capitalize() for s in splits])
+
+    # Lower camel casing (or 'drinking camel casing') converts above_average to aboveAverage
+    def lowercamelcase(self, data):
+        splits = re.split(r'[-_]+', data)
+        return data if len(splits) < 1 else splits[0].lower()+"".join([s.capitalize() for s in splits[1:]])
+
+    # Kebab casing (or 'sausage casing') converts AboveAverage to above-average
+    def kebabcase(self, data, delim = "-"):
+        # For casing treat characters without accents (ÉtéNéerlandais => été-néerlandais)
+        ascii_data = ''.join((c for c in unicodedata.normalize('NFD', data) if unicodedata.category(c) != 'Mn'))
+
+        splits = [m.span()[0] for m in re.finditer('[A-Z]+[a-z0-9]*', ascii_data)]+[len(ascii_data)]
+        splits = [0] + splits if splits[0] != 0 else splits
+        
+        need_prefix = lambda splits, split: split > 0 and data[splits[split]-1].isalnum()
+        do_prefix = lambda word, splits, split: (delim if need_prefix(splits,split) else "") + word
+        
+        return "".join([do_prefix(data[splits[split]:splits[split+1]].lower(),splits,split) for split in range(len(splits)-1)])
+
+    # Snake casing  converts AboveAverage to above-average
+    def snakecase(self, data):
+        return self.kebabcase(data, delim = "_")
 
 class _Functor_Hashlib(_Functor):
     __slots__ = ("algo")
@@ -305,6 +338,13 @@ class _Functor_Base64(_Functor):
 
         return results
 
+class _Functor_Reverse(_Functor):
+    def __init__(self):
+        super().__init__("reverse", "Reverse",
+                         "Reverse a string")
+
+    def convert(self, data):
+        return [{'label': data[::-1], 'target': data[::-1], 'desc': 'Reversed string'}]
 
 class String(kp.Plugin):
     """
@@ -350,7 +390,8 @@ class String(kp.Plugin):
             _Functor_UrlUnquote(),
             _Functor_ZLib("adler32"),
             _Functor_ZLib("crc32"),
-            _Functor_Base64()]
+            _Functor_Base64(),
+            _Functor_Reverse()]
 
         for algo in hashlib.algorithms_available:
             # some algorithms are declared twice in the list, like 'MD4' and
