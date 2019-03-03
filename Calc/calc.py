@@ -118,8 +118,8 @@ class _safe_mathfunc_args2float():
         return self._func(*converted_args, **kwargs)
 
 class CalcVarHandler:
-    REGEX_CALC_VAR_EXP = r'^\s*(?P<var1>[a-zA-Z][a-zA-Z0-9]*)?\s*=(?P<expr1>[^=].*)$'
-    REGEX_CALC_EXP_VAR = r'^(?P<expr2>.*[^=])=\s*(?P<var2>[a-zA-Z][a-zA-Z0-9]*)?\s*$'
+    REGEX_CALC_VAR_EXP = r'^\s*(?P<var1>[a-zA-Z][a-zA-Z0-9]*)?\s*(?P<eq1>=)(?P<expr1>[^=].*)$'
+    REGEX_CALC_EXP_VAR = r'^(?P<expr2>.*[^=])(?P<eq2>=)\s*(?P<var2>[a-zA-Z][a-zA-Z0-9]*)?\s*$'
     SAVE_VAR_PARSER    = f"{REGEX_CALC_VAR_EXP}|{REGEX_CALC_EXP_VAR}"
     VAR_CACHE_FILE    = "variables.json"
     calc_vars = {}
@@ -157,6 +157,13 @@ class CalcVarHandler:
     def save_if_var(self, ans):
         if not self.var_to_save:
             return
+        if self.var_to_save in self.constants.keys():
+            self.plugin.warn(f"A constant, {self.var_to_save}, cannot be modified.")
+            return
+        if self.var_to_save in keyword.kwlist:
+            self.plugin.warn(f"A Python keyword, {self.var_to_save}, cannot be used as variable name.")
+            return
+
         if isinstance(ans, Number):
             ans = ans.__float__()
         self.calc_vars[self.var_to_save] = ans
@@ -170,24 +177,22 @@ class CalcVarHandler:
         except Exception as e:
             self.plugin.err(f"Error saving variables file '{self.var_cache_file}'. {e}")
 
-    def expression_to_evaluate(self, user_input, always_evaluate):
+    def expression_to_evaluate(self, user_input, evaluate):
         self.var_to_save = self.plugin.ANSWER_VARIABLE
         save_var_match = self.save_var_parser.match(user_input)
         if not save_var_match:
-            return user_input if always_evaluate else None
-        elif save_var_match["var1"]:
+            return user_input if evaluate else None
+        elif save_var_match["var1"] or save_var_match["eq1"]:
             self.var_to_save = save_var_match["var1"]
+            if save_var_match["eq1"]:
+                evaluate = True
             expr = save_var_match["expr1"]
-        elif save_var_match["var2"]:
+        elif save_var_match["var2"] or save_var_match["eq2"]:
             self.var_to_save = save_var_match["var2"]
+            if save_var_match["eq2"]:
+                evaluate = True
             expr = save_var_match["expr2"]
-        else:
-            expr = user_input if (always_evaluate and self.var_to_save) else None
 
-        if self.var_to_save in self.constants.keys():
-            raise Exception('A constant value cannot be modified.')
-        if self.var_to_save in keyword.kwlist:
-            raise Exception('A Python keyword cannot be used as variable name.')
         return expr
 
     def update_calc_vars(self, own_names):
