@@ -204,6 +204,13 @@ class CalcVarHandler:
             current_vars.pop(var)
             self.save()
 
+    def delete_all_vars(self, current_vars):
+        for var in [key for key in current_vars.keys()]:
+            if not var in self.constants.keys():
+                self.calc_vars.pop(var)
+                current_vars.pop(var)
+        self.save()
+
 class Calc(kp.Plugin):
     """
     Inline calculator.
@@ -380,7 +387,11 @@ class Calc(kp.Plugin):
             self.create_action(
                 name="delete",
                 label="Delete",
-                short_desc="Press Enter to delete this variable")
+                short_desc="Press Enter to delete this variable"),
+            self.create_action(
+                name="delete_all",
+                label="Delete All",
+                short_desc="Press Enter to delete all variables")
         ])
 
     def on_catalog(self):
@@ -469,6 +480,8 @@ class Calc(kp.Plugin):
                 kpu.set_clipboard(item.target())
             elif action and action.name() == "delete":
                 self.var_handler.delete_var(item.data_bag(), self.MATH_CONSTANTS)
+            elif action and action.name() == "delete_all":
+                self.var_handler.delete_all_vars(self.MATH_CONSTANTS)
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
