@@ -9,6 +9,10 @@ import tokenize
 import math
 import random
 import traceback
+import os
+import re
+import json
+import keyword
 from .lib.number import Number
 from .lib import simpleeval
 
@@ -113,6 +117,87 @@ class _safe_mathfunc_args2float():
         converted_args = [Number(a).__float__() for a in args]
         return self._func(*converted_args, **kwargs)
 
+class CalcVarHandler:
+    REGEX_CALC_VAR_EXP = r'^\s*(?P<var1>[a-zA-Z][a-zA-Z0-9]*)?\s*=(?P<expr1>[^=].*)$'
+    REGEX_CALC_EXP_VAR = r'^(?P<expr2>.*[^=])=\s*(?P<var2>[a-zA-Z][a-zA-Z0-9]*)?\s*$'
+    SAVE_VAR_PARSER    = f"{REGEX_CALC_VAR_EXP}|{REGEX_CALC_EXP_VAR}"
+    VAR_CACHE_FILE    = "variables.json"
+    calc_vars = {}
+    var_to_save = None
+
+    def __init__(self, plugin, constants):
+        self.plugin = plugin
+        self.constants = constants.copy()
+        self.constants.pop(self.plugin.ANSWER_VARIABLE)
+        cache_path = self.plugin.get_package_cache_path(create=True)
+        self.var_cache_file = os.path.join(cache_path, self.VAR_CACHE_FILE)
+
+    def validate_vars(self):
+        forbidden = set()
+        for v in self.calc_vars.keys(): # Can't override constants/python keywords
+            if v in self.constants or v in keyword.kwlist:
+                forbidden.add(v)
+        for v in forbidden:
+                self.calc_vars.pop(v)
+
+    def load_vars(self):
+        self.save_var_parser = re.compile(self.SAVE_VAR_PARSER)
+
+        if os.path.exists(self.var_cache_file):
+            try:
+                with open(self.var_cache_file) as f:
+                    self.calc_vars = json.load(f)
+                    self.validate_vars()
+            except Exception as e:
+                self.plugin.err(f"Error loading variables file '{self.var_cache_file}'. {e}")
+
+    def vars(self):
+        return self.calc_vars.copy().items()
+
+    def save_if_var(self, ans):
+        if not self.var_to_save:
+            return
+        if isinstance(ans, Number):
+            ans = ans.__float__()
+        self.calc_vars[self.var_to_save] = ans
+        self.save()
+
+    def save(self):
+        self.validate_vars()
+        try:
+            with open(self.var_cache_file, 'w') as f:
+                json.dump(self.calc_vars, f)
+        except Exception as e:
+            self.plugin.err(f"Error saving variables file '{self.var_cache_file}'. {e}")
+
+    def expression_to_evaluate(self, user_input, always_evaluate):
+        self.var_to_save = self.plugin.ANSWER_VARIABLE
+        save_var_match = self.save_var_parser.match(user_input)
+        if not save_var_match:
+            return user_input if always_evaluate else None
+        elif save_var_match["var1"]:
+            self.var_to_save = save_var_match["var1"]
+            expr = save_var_match["expr1"]
+        elif save_var_match["var2"]:
+            self.var_to_save = save_var_match["var2"]
+            expr = save_var_match["expr2"]
+        else:
+            expr = user_input if (always_evaluate and self.var_to_save) else None
+
+        if self.var_to_save in self.constants.keys():
+            raise Exception('A constant value cannot be modified.')
+        if self.var_to_save in keyword.kwlist:
+            raise Exception('A Python keyword cannot be used as variable name.')
+        return expr
+
+    def update_calc_vars(self, own_names):
+        own_names.update(self.calc_vars)
+
+    def delete_var(self, var, current_vars):
+        if var in self.calc_vars:
+            self.calc_vars.pop(var)
+            current_vars.pop(var)
+            self.save()
 
 class Calc(kp.Plugin):
     """
@@ -120,7 +205,8 @@ class Calc(kp.Plugin):
 
     Evaluates a mathematical expression and shows its result.
     """
-
+    ITEMCAT_VAR = kp.ItemCategory.USER_BASE + 1
+    VARS_KEYWORD = "Calc: Variables"
     DEFAULT_KEYWORD = "="
     DEFAULT_ALWAYS_EVALUATE = True
     DEFAULT_ROUNDING_PRECISION = 5
@@ -131,6 +217,8 @@ class Calc(kp.Plugin):
     DEFAULT_CURRENCY_THOUSANDSEP = ","
     DEFAULT_CURRENCY_PLACES = 2
 
+    ANSWER_VARIABLE = 'ans'
+    
     MATH_OPERATORS = simpleeval.DEFAULT_OPERATORS
 
     MATH_CONSTANTS = {
@@ -138,7 +226,7 @@ class Calc(kp.Plugin):
         'e': math.e,
         'inf': math.inf,
         'nan': math.nan,
-        'ans': 0, # replaced by self.ans at runtime
+        ANSWER_VARIABLE: 0, # replaced by self.ans at runtime
     }
 
     MATH_FUNCTIONS = {
@@ -277,18 +365,51 @@ class Calc(kp.Plugin):
             self.MATH_OPERATORS[ast.FloorDiv] = simpleeval.op.floordiv
 
     def on_start(self):
+        self.var_handler = CalcVarHandler(self, self.MATH_CONSTANTS)
         self._read_config()
+        self.set_actions(self.ITEMCAT_VAR, [
+            self.create_action(
+                name="copy",
+                label="Copy",
+                short_desc="Press Enter to copy this varible"),
+            self.create_action(
+                name="delete",
+                label="Delete",
+                short_desc="Press Enter to delete this variable")
+        ])
 
     def on_catalog(self):
-        self.set_catalog([self.create_item(
-            category=kp.ItemCategory.KEYWORD,
-            label=self.DEFAULT_KEYWORD,
-            short_desc="Evaluate a mathematical expression",
-            target=self.DEFAULT_KEYWORD,
-            args_hint=kp.ItemArgsHint.REQUIRED,
-            hit_hint=kp.ItemHitHint.NOARGS)])
+        self.set_catalog([
+            self.create_item(
+                category=kp.ItemCategory.KEYWORD,
+                label=self.DEFAULT_KEYWORD,
+                short_desc="Evaluate a mathematical expression",
+                target=self.DEFAULT_KEYWORD,
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.NOARGS),
+            self.create_item(
+                category=self.ITEMCAT_VAR,
+                label=self.VARS_KEYWORD,
+                short_desc="Display Calc variables",
+                target=self.VARS_KEYWORD,
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.NOARGS)])
 
     def on_suggest(self, user_input, items_chain):
+        if items_chain and items_chain[0].category() == self.ITEMCAT_VAR:
+            suggestions = []
+            for i,(var,val) in enumerate(self.var_handler.vars()):
+                suggestions.append(self.create_item(
+                    category=self.ITEMCAT_VAR,
+                    label=f"{var} = {val}",
+                    short_desc="Press Enter to copy the result",
+                    target=str(val),
+                    args_hint=kp.ItemArgsHint.FORBIDDEN,
+                    hit_hint=kp.ItemHitHint.IGNORE,
+                    data_bag = var))
+            self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.LABEL_ASC)
+            return
+
         if not len(user_input):
             return
         if items_chain and (
@@ -297,11 +418,9 @@ class Calc(kp.Plugin):
             return
 
         eval_requested = False
-        if user_input.startswith(self.DEFAULT_KEYWORD):
-            # always evaluate if expression is prefixed by DEFAULT_KEYWORD
-            user_input = user_input[1:].strip()
-            if not len(user_input):
-                return
+        expression = self.var_handler.expression_to_evaluate(user_input, self.always_evaluate)
+        if expression:
+            # always evaluate if an assignment is made or = (DEFAULT_KEYWORD) is used
             eval_requested = True
         elif items_chain:
             eval_requested = True
@@ -310,7 +429,7 @@ class Calc(kp.Plugin):
 
         suggestions = []
         try:
-            results = self._eval(user_input)
+            results = self._eval(expression)
             if not isinstance(results, (tuple, list)):
                 results = (results,)
             for res in results:
@@ -328,10 +447,10 @@ class Calc(kp.Plugin):
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
                     hit_hint=kp.ItemHitHint.IGNORE))
         except Exception as exc:
-            if not eval_requested:
+            if not eval_requested or self.var_handler.var_to_save == self.ANSWER_VARIABLE:
                 return # stay quiet if evaluation hasn't been explicitly requested
             suggestions.append(self.create_error_item(
-                label=user_input,
+                label=expression,
                 short_desc="Error: " + str(exc)))
 
         self.set_suggestions(suggestions, kp.Match.ANY, kp.Sort.NONE)
@@ -339,6 +458,12 @@ class Calc(kp.Plugin):
     def on_execute(self, item, action):
         if item and item.category() == kp.ItemCategory.EXPRESSION:
             kpu.set_clipboard(item.target())
+            self.var_handler.save_if_var(self.ans)
+        elif item and (item.category() == self.ITEMCAT_VAR):
+            if action and action.name() == "copy":
+                kpu.set_clipboard(item.target())
+            elif action and action.name() == "delete":
+                self.var_handler.delete_var(item.data_bag(), self.MATH_CONSTANTS)
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
@@ -346,6 +471,7 @@ class Calc(kp.Plugin):
 
     def _read_config(self):
         settings = self.load_settings()
+        self.var_handler.load_vars()
 
         # [main] always_evaluate
         self.always_evaluate = settings.get_bool(
@@ -479,7 +605,8 @@ class Calc(kp.Plugin):
 
         # Prepare the 'names' dictionary
         own_names = self.MATH_CONSTANTS
-        own_names['ans'] = self.ans
+        own_names[self.ANSWER_VARIABLE] = self.ans
+        self.var_handler.update_calc_vars(own_names)
 
         # Evaluate the expression
         # We bypass the SimpleEval.eval() method only for the sake of having a
