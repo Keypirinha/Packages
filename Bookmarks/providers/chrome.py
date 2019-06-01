@@ -10,6 +10,7 @@ class ChromeProviderBase(BookmarksProviderBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.filename = "Bookmarks"
         try:
             self.localappdata_dir = kpu.shell_known_folder_path(
                                     "{f1b32785-6fba-4fcf-9d55-7b8e7f157091}")
@@ -40,7 +41,7 @@ class ChromeProviderBase(BookmarksProviderBase):
 
                 for profile_dir in profile_dirs:
                     bookmarks += self._read_bookmarks(os.path.join(
-                                        chrome_dir, profile_dir, "Bookmarks"))
+                                        chrome_dir, profile_dir, self.filename))
         return bookmarks
 
     def _read_bookmarks(self, bookmarks_file):
