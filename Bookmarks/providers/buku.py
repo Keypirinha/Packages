@@ -2,9 +2,10 @@
 # buku bookmark provider by CKolumbus@ac-drexler.de
 
 import keypirinha_util as kpu
-import os.path
+import os
 import configparser
 import sqlite3
+import sys
 from ._base import Bookmark, BookmarksProviderBase
 
 class BukuProvider(BookmarksProviderBase):
