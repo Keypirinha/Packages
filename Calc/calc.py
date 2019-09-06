@@ -74,7 +74,7 @@ def _safe_round(x, ndigits=None):
 
 
 def _safe_custom_rand(top):
-    return int(random() * Number(top).safe_int())
+    return int(random.random() * Number(top).safe_int())
 
 def _safe_custom_randf(a, b):
     try:
