@@ -179,9 +179,10 @@ class CalcVarHandler:
 
     def expression_to_evaluate(self, user_input, evaluate):
         self.var_to_save = self.plugin.ANSWER_VARIABLE
+        suffix = False
         save_var_match = self.save_var_parser.match(user_input)
         if not save_var_match:
-            return user_input if evaluate else None
+            return (user_input if evaluate else None, suffix)
         elif save_var_match["var1"] or save_var_match["eq1"]:
             self.var_to_save = save_var_match["var1"]
             if save_var_match["eq1"]:
@@ -191,9 +192,10 @@ class CalcVarHandler:
             self.var_to_save = save_var_match["var2"]
             if save_var_match["eq2"]:
                 evaluate = True
+                suffix = True
             expr = save_var_match["expr2"]
 
-        return expr
+        return (expr, suffix)
 
     def update_calc_vars(self, own_names):
         own_names.update(self.calc_vars)
@@ -434,7 +436,7 @@ class Calc(kp.Plugin):
             return
 
         eval_requested = False
-        expression = self.var_handler.expression_to_evaluate(user_input, self.always_evaluate)
+        expression, suffix = self.var_handler.expression_to_evaluate(user_input, self.always_evaluate)
         if expression:
             # always evaluate if an assignment is made or = (DEFAULT_KEYWORD) is used
             eval_requested = True
@@ -463,8 +465,9 @@ class Calc(kp.Plugin):
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
                     hit_hint=kp.ItemHitHint.IGNORE))
         except Exception as exc:
-            if not eval_requested or self.var_handler.var_to_save == self.ANSWER_VARIABLE:
+            if suffix_eq or not eval_requested or self.var_handler.var_to_save == self.ANSWER_VARIABLE:
                 return # stay quiet if evaluation hasn't been explicitly requested
+                # or if suffix format to avoid getting exceptions of things like https://www.youtube.com/watch?v=abcdef
             suggestions.append(self.create_error_item(
                 label=expression,
                 short_desc="Error: " + str(exc)))
