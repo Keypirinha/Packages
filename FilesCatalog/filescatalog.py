@@ -253,6 +253,7 @@ class FilesCatalog(kp.Plugin):
     """A plugin to catalog items from the file system"""
 
     CONFIG_SECTION_MAIN = "main"
+    CONFIG_SECTION_BROWSING = "browsing"
     CONFIG_SECTION_PROFILE = "profile/"
 
     MAX_PROFILE_INHERITANCE_DEPTH = 5
@@ -260,9 +261,15 @@ class FilesCatalog(kp.Plugin):
     DEFAULT_CATALOG_LIMIT = 100_000
     DEFAULT_CONFIG_DEBUG = False
     DEFAULT_ITEM_LABEL = "{clean_name}"
+    DEFAULT_SHOW_DIRS_FIRST = True
+    DEFAULT_SHOW_HIDDEN_FILES = False
+    DEFAULT_SHOW_SYSTEM_FILES = False
 
     catalog_limit = DEFAULT_CATALOG_LIMIT
     config_debug = DEFAULT_CONFIG_DEBUG
+    show_dirs_first = DEFAULT_SHOW_DIRS_FIRST
+    show_hidden_files = DEFAULT_SHOW_HIDDEN_FILES
+    show_system_files = DEFAULT_SHOW_SYSTEM_FILES
     profiles = OrderedDict()
 
     def __init__(self):
@@ -343,9 +350,28 @@ class FilesCatalog(kp.Plugin):
 
     def on_suggest(self, user_input, items_chain):
         if items_chain and items_chain[-1].category() == kp.ItemCategory.FILE:
-            clone = items_chain[-1].clone()
-            clone.set_args(user_input)
-            self.set_suggestions([clone])
+            current_item = items_chain[-1]
+            path = current_item.target()
+            if os.path.isdir(path):
+                # File is a directory
+                suggestions, match_method, sort_method = self._browse_dir(path)
+                self.set_suggestions(suggestions, match_method, sort_method)
+            elif os.path.splitext(path)[1].lower() == ".lnk":
+                # File is a link
+                try:
+                    link_props = kpu.read_link(path)
+                    if os.path.isdir(link_props['target']):
+                        # Link points to a directory
+                        dir_target = link_props['target']
+                        suggestions, match_method, sort_method = self._browse_dir(
+                                            dir_target, check_base_dir=False)
+                        self.set_suggestions(suggestions, match_method, sort_method)
+                except:
+                    pass
+            else:
+                clone = items_chain[-1].clone()
+                clone.set_args(user_input)
+                self.set_suggestions([clone])
 
     def on_execute(self, item, action):
         kpu.execute_default_action(self, item, action)
@@ -373,6 +399,28 @@ class FilesCatalog(kp.Plugin):
             fallback=self.DEFAULT_CATALOG_LIMIT, min=5_000, max=300_000)
         if catalog_limit != self.catalog_limit:
             self.catalog_limit = catalog_limit
+            config_changed = True
+
+        # Ideally, changing these settings shouldn't trigger recatalogging.
+        # However, this seems to be necessary due to the way that filter
+        # comparison works.
+        # If config_changed is omitted for these settings an error will be
+        # thrown by filefilter.py. Still don't fully understand why.
+        old_browsing_defaults = [
+            self.show_dirs_first,
+            self.show_hidden_files,
+            self.show_system_files]
+        self.show_dirs_first = settings.get_bool(
+            "show_dirs_first", "browsing", self.DEFAULT_SHOW_DIRS_FIRST)
+        self.show_hidden_files = settings.get_bool(
+            "show_hidden_files", "browsing", self.DEFAULT_SHOW_HIDDEN_FILES)
+        self.show_system_files = settings.get_bool(
+            "show_system_files", "browsing", self.DEFAULT_SHOW_SYSTEM_FILES)
+        browsing_defaults = [
+            self.show_dirs_first,
+            self.show_hidden_files,
+            self.show_system_files]
+        if not config_changed and old_browsing_defaults != browsing_defaults:
             config_changed = True
 
         # read profiles names and validate them
@@ -749,3 +797,35 @@ class FilesCatalog(kp.Plugin):
             log +=  "\n"
 
         self.info(log)
+
+    def _browse_dir(self, base_dir, check_base_dir=True, search_terms="", store_score=False):
+        base_dir = self._safe_normpath(base_dir)
+        return kpu.browse_directory(self,
+                                    base_dir,
+                                    check_base_dir=check_base_dir,
+                                    search_terms=search_terms,
+                                    store_score=store_score,
+                                    show_dirs_first=self.show_dirs_first,
+                                    show_hidden_files=self.show_hidden_files,
+                                    show_system_files=self.show_system_files)
+
+    def _safe_normpath(self, path):
+        # If the given path is not a complete UNC yet, os.path.normpath() will
+        # reduce the trailing \\ prefix to \. Here, we want to preserve the
+        # meaning of the prefix specified by the user.
+        #
+        # Examples:
+        #   os.path.normpath("//server/share") == "\\\\server\\share"
+        #   os.path.normpath("\\\\server") == "\\server"
+        #   os.path.normpath("\\\\\\server\\share") == "\\server\\share" (WRONG)
+        prefix_seps = 0
+        for idx in range(min(2, len(path))):
+            if path[idx] not in (os.sep, os.altsep):
+                break
+            prefix_seps += 1
+
+        path = os.path.normpath(path)
+        if prefix_seps > 1:
+            path = (os.sep * 2) + path.lstrip(os.sep)
+
+        return path
