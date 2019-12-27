@@ -242,8 +242,6 @@ class WinSCP(kp.Plugin):
                     try:
                         session_name = winreg.EnumKey(hkey, index)
                         index += 1
-                        if '/' in session_name:
-                            continue  # ignore workspaces
                         dist_props['sessions'].append(
                             urllib.parse.unquote(
                                 session_name, encoding='utf-8'))
