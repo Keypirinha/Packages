@@ -2,6 +2,7 @@
 
 import keypirinha as kp
 import keypirinha_util as kpu
+from keypirinha_wintypes import FOLDERID
 import os.path
 import winreg
 import urllib.parse
@@ -128,11 +129,13 @@ class WinSCP(kp.Plugin):
 
             dist_path = settings.get_stripped("path", section_name)
             dist_enable = settings.get_bool("enable", section_name)
+            dist_ini_path = settings.get_stripped("ini_path", section_name)
 
             dist_props = detect_method(
                 dist_enable,
                 settings.get_stripped("label", section_name),
-                dist_path)
+                dist_path,
+                dist_ini_path)
 
             if not dist_props:
                 if dist_path:
@@ -157,7 +160,7 @@ class WinSCP(kp.Plugin):
 
 
 
-    def _detect_distro_official(self, given_enabled, given_label, given_path):
+    def _detect_distro_official(self, given_enabled, given_label, given_path, given_ini_path):
         dist_props = {
             'enabled': given_enabled,
             'label': given_label,
@@ -200,20 +203,27 @@ class WinSCP(kp.Plugin):
         # Portable mode. The steps are described by the official documentation
         # at: https://winscp.net/eng/docs/config#auto
 
-        expected_ini_locations = (
-            # along with the exe file
-            os.path.join(os.path.dirname(exe_file), self.INI_NAME_OFFICIAL),
-            # in "%USERPROFILE%\AppData\Roaming" folder (DIRECTLY)
-            os.path.join(
-                kpu.shell_known_folder_path(
-                    "{3eb685db-65f9-4cf6-a03a-e3ef65729f3d}"),
-                self.INI_NAME_OFFICIAL))
-
         ini_file = None
-        for ini_location in expected_ini_locations:
-            if os.path.isfile(ini_location):
-                ini_file = ini_location
-                break
+        # If a configuration (INI) file is provided, we use that instead of
+        # searching for it.
+        if given_ini_path is not None and os.path.isfile(given_ini_path):
+            ini_file = given_ini_path
+        else:
+            if given_ini_path is not None:
+                self.err("Failed to read INI file:", given_ini_path)
+
+            expected_ini_locations = (
+                # along with the exe file
+                os.path.join(os.path.dirname(exe_file), self.INI_NAME_OFFICIAL),
+                # in "%USERPROFILE%\AppData\Roaming" folder (DIRECTLY)
+                os.path.join(
+                    kpu.shell_known_folder_path(FOLDERID.RoamingAppData.value),
+                    self.INI_NAME_OFFICIAL))
+
+            for ini_location in expected_ini_locations:
+                if os.path.isfile(ini_location):
+                    ini_file = ini_location
+                    break
 
         if ini_file is not None:
             # While the ini file format seems to be standard (i.e.: parseable
@@ -232,6 +242,8 @@ class WinSCP(kp.Plugin):
                         urllib.parse.unquote(
                             ini_line[len(ini_section_prefix):-1]))
             ini_content = None
+
+            dist_props['cmd_args'].insert(0, '/ini=' + ini_file)
         else:
             try:
                 hkey = winreg.OpenKey(
