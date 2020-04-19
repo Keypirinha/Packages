@@ -41,7 +41,7 @@ ScanProfile = namedtuple("ScanProfile", (
     "trim_extensions",
     "file_item_label", "file_item_desc",
     "dir_item_label", "dir_item_desc",
-    "callback"))
+    "callback", "open_with"))
 
 class LazyItemLabelFormatter:
     def __init__(self, entry, profile, plugin):
@@ -213,6 +213,11 @@ def default_scan_callback(entry, profile, plugin):
         item_label_tmpl = profile.file_item_label
         item_desc_tmpl = profile.file_item_desc
 
+    if profile.open_with:
+        open_with = profile.open_with.replace('{}', entry.path)
+    else:
+        open_with = None
+
     formatter = LazyItemLabelFormatter(entry, profile, plugin)
     item_label = formatter.format(item_label_tmpl, fallback=entry.name)
     item_desc = formatter.format(item_desc_tmpl, fallback="")
@@ -223,7 +228,8 @@ def default_scan_callback(entry, profile, plugin):
         short_desc=item_desc, # path is displayed on GUI if desc is empty
         target=entry.path,
         args_hint=kp.ItemArgsHint.ACCEPTED,
-        hit_hint=kp.ItemHitHint.KEEPALL)
+        hit_hint=kp.ItemHitHint.KEEPALL,
+        data_bag=open_with)
 
 try:
     from FilesCatalog import filescatalog_user_callbacks
@@ -374,7 +380,16 @@ class FilesCatalog(kp.Plugin):
                 self.set_suggestions([clone])
 
     def on_execute(self, item, action):
-        kpu.execute_default_action(self, item, action)
+        if item.data_bag():
+            # open with a custom command
+            parts = re.findall(r'(?=\s|\A)\s*([^" ]+|"[^"]*")(?=\s|\Z)', item.data_bag(), re.U)
+            if len(parts) > 0:
+                command, *params = parts
+                kpu.shell_execute(command, params)
+            else:
+                self.info("Cannot open item with: '%s', parsed as %s" % (item.data_bag(), parts))
+        else:
+            kpu.execute_default_action(self, item, action)
 
     def on_events(self, flags):
         if flags & kp.Events.PACKCONFIG:
@@ -667,6 +682,14 @@ class FilesCatalog(kp.Plugin):
             else:
                 profdef['trim_extensions'] = frozenset(
                     filter(None, re.split(r'[\s\;]+', trim_extensions)))
+
+            # open_with
+            profdef['open_with'] = self._read_profile_setting(
+                profiles_map, profiles_def, settings,
+                profile_name, "get_stripped", "open_with",
+                fallback="").strip()
+            if not profdef['open_with']:
+                profdef['open_with'] = None
 
             # python_callback
             profdef['callback'] = self._read_profile_setting(
