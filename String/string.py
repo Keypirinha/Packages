@@ -78,7 +78,8 @@ class _Functor_CaseConversion(_Functor):
         ("uppercamelcase", "Upper Camel Case"),
         ("lowercamelcase", "Lower Camel Case"),
         ("kebabcase", "Kebab Case"),
-        ("snakecase", "Snake Case"))
+        ("snakecase", "Snake Case"),
+        ("slug", "Slug"))
 
     def __init__(self):
         super().__init__("case_convert", "Case Conversion",
@@ -139,6 +140,14 @@ class _Functor_CaseConversion(_Functor):
     # Snake casing  converts AboveAverage to above-average
     def snakecase(self, data):
         return self.kebabcase(data, delim = "_")
+
+    # Slug casing  converts `Slug (Casé)` to `slug-case`
+    def slug(self, data):
+        result = []
+        splits = re.compile(r'[\t !"#$%&\'()*\-/<=>?@\[\\\]^_`{|},.;:]+')
+        for word in splits.split(data.lower()):
+            result.append(unicodedata.normalize('NFKD', word).encode('ascii', 'ignore').decode('ascii'))
+        return '-'.join(result)
 
 class _Functor_Hashlib(_Functor):
     __slots__ = ("algo")
