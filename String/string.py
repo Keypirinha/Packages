@@ -79,7 +79,7 @@ class _Functor_CaseConversion(_Functor):
         ("lowercamelcase", "Lower Camel Case"),
         ("kebabcase", "Kebab Case"),
         ("snakecase", "Snake Case"),
-        ("slug", "Slug"))
+        ("slug", "Slug Case"))
 
     def __init__(self):
         super().__init__("case_convert", "Case Conversion",
