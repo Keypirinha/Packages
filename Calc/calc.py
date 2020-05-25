@@ -121,7 +121,7 @@ class CalcVarHandler:
     REGEX_CALC_VAR_EXP = r'^\s*(?P<var1>[a-zA-Z][a-zA-Z0-9]*)?\s*(?P<eq1>=)(?P<expr1>[^=].*)$'
     REGEX_CALC_EXP_VAR = r'^(?P<expr2>.*[^=])(?P<eq2>=)\s*(?P<var2>[a-zA-Z][a-zA-Z0-9]*)?\s*$'
     SAVE_VAR_PARSER    = f"{REGEX_CALC_VAR_EXP}|{REGEX_CALC_EXP_VAR}"
-    VAR_CACHE_FILE    = "variables.json"
+    VAR_CACHE_FILE     = "variables.json"
     calc_vars = {}
     var_to_save = None
 
@@ -232,7 +232,7 @@ class Calc(kp.Plugin):
     DEFAULT_CURRENCY_PLACES = 2
 
     ANSWER_VARIABLE = 'ans'
-    
+
     MATH_OPERATORS = simpleeval.DEFAULT_OPERATORS
 
     MATH_CONSTANTS = {
@@ -465,9 +465,12 @@ class Calc(kp.Plugin):
                     args_hint=kp.ItemArgsHint.FORBIDDEN,
                     hit_hint=kp.ItemHitHint.IGNORE))
         except Exception as exc:
-            if suffix_eq or not eval_requested or self.var_handler.var_to_save == self.ANSWER_VARIABLE:
-                return # stay quiet if evaluation hasn't been explicitly requested
-                # or if suffix format to avoid getting exceptions of things like https://www.youtube.com/watch?v=abcdef
+            if suffix or not eval_requested or self.var_handler.var_to_save == self.ANSWER_VARIABLE:
+                # stay quiet if evaluation hasn't been explicitly requested or
+                # if suffix format to avoid getting exceptions of things like:
+                # https://www.youtube.com/watch?v=abcdef
+                return
+
             suggestions.append(self.create_error_item(
                 label=expression,
                 short_desc="Error: " + str(exc)))
