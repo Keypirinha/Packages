@@ -690,7 +690,8 @@ class Calc(kp.Plugin):
             else:
                 def do_trans(val):
                     val = str(val).translate(self.transmap_output).lower()
-                    if self.decimal_separator in val:
+                    # Strip right-most zeroes except for scientifically notated values.
+                    if self.decimal_separator in val and ('e' not in val and 'E' not in val):
                         val = val.rstrip("0").rstrip(self.decimal_separator)
                         if not len(val):
                             val = "0"
