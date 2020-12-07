@@ -2,6 +2,7 @@
 
 import keypirinha as kp
 import keypirinha_util as kpu
+import os
 import os.path
 import winreg
 import urllib.parse
@@ -106,8 +107,6 @@ class PuTTY(kp.Plugin):
             self.info("Configuration changed, rebuilding catalog...")
             self.on_catalog()
 
-
-
     def _read_config(self):
         if self.default_icon_handle:
             self.default_icon_handle.free()
@@ -126,19 +125,8 @@ class PuTTY(kp.Plugin):
                 self.err("Unknown PuTTY distribution name: ", dist_name)
                 continue
 
-            dist_path = settings.get_stripped("path", section_name)
-            dist_enable = settings.get_bool("enable", section_name)
-
-            dist_props = detect_method(
-                dist_enable,
-                settings.get_stripped("label", section_name),
-                dist_path)
-
+            dist_props = detect_method(settings, section_name, dist_name)
             if not dist_props:
-                if dist_path:
-                    self.warn('PuTTY distribution "{}" not found in: {}'.format(dist_name, dist_path))
-                elif dist_enable:
-                    self.warn('PuTTY distribution "{}" not found'.format(dist_name))
                 continue
 
             self.distros[dist_name.lower()] = {
@@ -155,9 +143,11 @@ class PuTTY(kp.Plugin):
                 if self.default_icon_handle:
                     self.set_default_icon(self.default_icon_handle)
 
+    def _detect_distro_official(self, settings, section_name, dist_name):
+        given_enabled = settings.get_bool("enable", section_name)
+        given_label = settings.get_stripped("label", section_name)
+        given_path = settings.get_stripped("path", section_name)
 
-
-    def _detect_distro_official(self, given_enabled, given_label, given_path):
         dist_props = {
             'enabled': given_enabled,
             'label': given_label,
@@ -192,6 +182,7 @@ class PuTTY(kp.Plugin):
         #if not exe_file:
         #    exe_file = self._autodetect_startmenu(self.EXE_NAME_OFFICIAL, "*putty*.lnk")
         if not exe_file:
+            self.warn('PuTTY distribution "{}" not found in: {}'.format(dist_name, given_path))
             return None
         dist_props['exe_file'] = exe_file
 
@@ -214,7 +205,11 @@ class PuTTY(kp.Plugin):
 
         return dist_props
 
-    def _detect_distro_portableapps(self, given_enabled, given_label, given_path):
+    def _detect_distro_portableapps(self, settings, section_name, dist_name):
+        given_enabled = settings.get_bool("enable", section_name)
+        given_label = settings.get_stripped("label", section_name)
+        given_path = settings.get_stripped("path", section_name)
+
         dist_props = {
             'enabled': given_enabled,
             'label': given_label,
@@ -243,6 +238,7 @@ class PuTTY(kp.Plugin):
         if not exe_file:
             exe_file = self._autodetect_startmenu(self.EXE_NAME_PAPPS, "*putty*.lnk")
         if not exe_file:
+            self.warn('PuTTY distribution "{}" not found in: {}'.format(dist_name, given_path))
             return None
         dist_props['exe_file'] = exe_file
 
@@ -257,12 +253,72 @@ class PuTTY(kp.Plugin):
         for reg_line in iter(reg_content.splitlines()):
             if reg_line.lower().startswith(reg_prefix) and reg_line.endswith(']'):
                 dist_props['sessions'].append(urllib.parse.unquote(
-                    reg_line[len(reg_prefix):-1], encoding='mbcs')) # important! putty uses the current code page
+                    reg_line[len(reg_prefix):-1], encoding="mbcs"))  # important! putty uses the current code page
         reg_content = None
 
         return dist_props
 
+    def _detect_distro_jkputty(self, settings, section_name, dist_name):
+        given_enabled = settings.get_bool("enable", section_name)
+        given_label = settings.get_stripped("label", section_name)
+        given_exe_path = settings.get_stripped("exe_path", section_name)
+        given_sessions_dir = settings.get_stripped("sessions_path", section_name)
+        given_session_suffix = settings.get_stripped("session_suffix", section_name)
 
+        dist_props = {
+            'enabled': given_enabled,
+            'label': given_label,
+            'exe_file': None,
+            'cmd_args': ['-load', '%1'],
+            'sessions': []}
+
+        # label
+        if not dist_props['label']:
+            dist_props['label'] = "PuTTY"
+
+        # enabled? don't go further if not
+        if dist_props['enabled'] is None:
+            dist_props['enabled'] = False
+        if not dist_props['enabled']:
+            return dist_props
+
+        # check executable
+        exe_file = os.path.normpath(given_exe_path)
+        if not os.path.isfile(given_exe_path):
+            self.warn('Executable of PuTTY distribution "{}" was not found at: {}'.format(dist_name, given_exe_path))
+            return None
+        dist_props['exe_file'] = exe_file
+
+        # check sessions_path
+        sessions_dir = given_sessions_dir
+        if not sessions_dir:
+            self.warn('No sessions_path value specified for PuTTY distribution "{}"'.format(dist_name))
+            return None
+
+            if len(sessions_dir) > 2 and sessions_dir[0] == '"' and sessions_dir[-1] == '"':
+                sessions_dir = sessions_dir[1:-1]
+
+            if not os.path.isdir(sessions_dir):
+                self.warn('sessions_path for PuTTY distribution "{}" not found'.format(dist_name))
+                return None
+
+        # list configured sessions
+        try:
+            for entry in os.scandir(sessions_dir):
+                if entry.is_file() and (not given_session_suffix or entry.name.endswith(given_session_suffix)):
+                    session_name = entry.name
+                    if given_session_suffix:
+                        session_name = session_name[0:-len(given_session_suffix)]
+
+                    # important! putty uses the current code page
+                    session_name = urllib.parse.unquote(session_name, encoding="mbcs")
+
+                    dist_props['sessions'].append(session_name)
+        except Exception as exc:
+            self.warn('failed to list sessions of PuTTY distribution "{}". Error: {}'.format(dist_name, str(exc)))
+            return None
+
+        return dist_props
 
     def _autodetect_official_installreg(self):
         try:
