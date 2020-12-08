@@ -2,6 +2,7 @@
 
 import keypirinha as kp
 import keypirinha_util as kpu
+import glob
 import os
 import os.path
 import winreg
@@ -258,7 +259,7 @@ class PuTTY(kp.Plugin):
 
         return dist_props
 
-    def _detect_distro_jkputty(self, settings, section_name, dist_name):
+    def _detect_distro_filebased(self, settings, section_name, dist_name):
         given_enabled = settings.get_bool("enable", section_name)
         given_label = settings.get_stripped("label", section_name)
         given_exe_path = settings.get_stripped("exe_path", section_name)
@@ -303,16 +304,26 @@ class PuTTY(kp.Plugin):
                 return None
 
         # list configured sessions
+        sessions_dir_base = os.path.normpath(sessions_dir) + os.sep
         try:
-            for entry in os.scandir(sessions_dir):
-                if entry.is_file() and (not given_session_suffix or entry.name.endswith(given_session_suffix)):
-                    session_name = entry.name
-                    if given_session_suffix:
-                        session_name = session_name[0:-len(given_session_suffix)]
+            for entry in glob.iglob(sessions_dir_base + "**", recursive=True):
+                if not os.path.isfile(entry):
+                    continue
 
-                    # important! putty uses the current code page
-                    session_name = urllib.parse.unquote(session_name, encoding="mbcs")
+                if given_session_suffix and not entry.endswith(given_session_suffix):
+                    continue
 
+                session_name = entry[len(sessions_dir_base):]
+                if given_session_suffix:
+                    session_name = session_name[0:-len(given_session_suffix)]
+
+                if os.sep != "/":
+                    session_name = session_name.replace(os.sep, "/")
+
+                # important! putty uses the current code page
+                session_name = urllib.parse.unquote(session_name, encoding="mbcs")
+
+                if session_name:
                     dist_props['sessions'].append(session_name)
         except Exception as exc:
             self.warn('failed to list sessions of PuTTY distribution "{}". Error: {}'.format(dist_name, str(exc)))
