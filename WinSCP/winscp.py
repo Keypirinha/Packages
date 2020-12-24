@@ -291,8 +291,9 @@ class WinSCP(kp.Plugin):
 
     def _autodetect_startmenu(self, exe_name, name_pattern):
         known_folders = (
-            "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}", # FOLDERID_StartMenu
-            "{a4115719-d62e-491d-aa7c-e74b8be3b067}") # FOLDERID_CommonStartMenu
+            "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}",  # FOLDERID_StartMenu
+            "{a4115719-d62e-491d-aa7c-e74b8be3b067}",  # FOLDERID_CommonStartMenu
+            "{a77f5d77-2e2b-44c3-a6a2-aba601054a51}",) # FOLDERID_Programs
 
         found_link_files = []
         for kf_guid in known_folders:
