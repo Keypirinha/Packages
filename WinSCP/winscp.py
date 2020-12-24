@@ -309,7 +309,7 @@ class WinSCP(kp.Plugin):
         for link_file in found_link_files:
             try:
                 link_props = kpu.read_link(link_file)
-                if (link_props['target'].lower().endswith(exe_name) and
+                if (link_props['target'].endswith(exe_name) and
                         os.path.exists(link_props['target'])):
                     return link_props['target']
             except Exception as exc:
