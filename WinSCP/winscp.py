@@ -267,10 +267,10 @@ class WinSCP(kp.Plugin):
 
 
 
-    def _autodetect_official_installreg(self):
+    def _exe_from_reg(self, reg_root):
         try:
             key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
+                reg_root,
                 "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\winscp3_is1",
                 access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY)
             value = winreg.QueryValueEx(key, "InstallLocation")[0]
@@ -281,6 +281,11 @@ class WinSCP(kp.Plugin):
         except:
             pass
         return None
+
+    def _autodetect_official_installreg(self):
+        hklm = self._exe_from_reg(winreg.HKEY_LOCAL_MACHINE)
+        return (hklm if hklm is not None
+                else self._exe_from_reg(winreg.HKEY_CURRENT_USER))
 
     def _autodetect_official_progfiles(self):
         for hive in ('%PROGRAMFILES%', '%PROGRAMFILES(X86)%'):
