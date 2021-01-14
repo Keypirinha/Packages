@@ -2,6 +2,7 @@
 
 from ._base import Bookmark
 from .chrome import ChromeProvider, ChromeCanaryProvider, ChromiumProvider
+from .edge import EdgeProvider
 from .falkon import FalkonProvider
 from .firefox import FirefoxProvider
 from .iexplorer import InternetExplorerProvider
