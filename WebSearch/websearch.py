@@ -109,7 +109,9 @@ class WebSearch(kp.Plugin):
 
     def _url_build(self, url_format, search_terms, quoting='auto', fallback_url=None):
         def _quote(fmt_string, search_terms, quoting):
-            if quoting == 'plus':
+            if quoting == 'none':
+                return fmt_string.replace("%s", search_terms)
+            elif quoting == 'plus':
                 return fmt_string.replace(
                     "%s", urllib.parse.quote_plus(search_terms))
             else: # if quoting == 'quote':
@@ -162,7 +164,7 @@ class WebSearch(kp.Plugin):
             'all': kp.ItemHitHint.KEEPALL,
             'site': kp.ItemHitHint.NOARGS,
             'none': kp.ItemHitHint.IGNORE}
-        supported_quoting = ['auto', 'full', 'plus']
+        supported_quoting = ['auto', 'full', 'plus', 'none']
 
         settings = self.load_settings()
 
