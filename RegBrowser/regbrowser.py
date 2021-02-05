@@ -45,6 +45,10 @@ class RegBrowser(kp.Plugin):
                 abbr = "HK" + "".join([x[0] for x in name.split("_")][1:])
                 self.root_hkeys_dict.setdefault(abbr, value)
 
+                # standard format used by PowerShell - "HKCR:", etc.
+                abbr += ":"
+                self.root_hkeys_dict.setdefault(abbr, value)
+
                 # value to full name
                 self.root_hkeys_dict.setdefault(value, name)
 
