@@ -267,10 +267,10 @@ class WinSCP(kp.Plugin):
 
 
 
-    def _autodetect_official_installreg(self):
+    def _exe_from_reg(self, reg_root):
         try:
             key = winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
+                reg_root,
                 "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\winscp3_is1",
                 access=winreg.KEY_READ | winreg.KEY_WOW64_32KEY)
             value = winreg.QueryValueEx(key, "InstallLocation")[0]
@@ -282,6 +282,11 @@ class WinSCP(kp.Plugin):
             pass
         return None
 
+    def _autodetect_official_installreg(self):
+        hkcu = self._exe_from_reg(winreg.HKEY_CURRENT_USER)
+        return (hkcu if hkcu is not None
+                else self._exe_from_reg(winreg.HKEY_LOCAL_MACHINE))
+
     def _autodetect_official_progfiles(self):
         for hive in ('%PROGRAMFILES%', '%PROGRAMFILES(X86)%'):
             exe_file = os.path.join(
@@ -291,8 +296,9 @@ class WinSCP(kp.Plugin):
 
     def _autodetect_startmenu(self, exe_name, name_pattern):
         known_folders = (
-            "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}", # FOLDERID_StartMenu
-            "{a4115719-d62e-491d-aa7c-e74b8be3b067}") # FOLDERID_CommonStartMenu
+            "{625b53c3-ab48-4ec1-ba1f-a1ef4146fc19}",  # FOLDERID_StartMenu
+            "{a4115719-d62e-491d-aa7c-e74b8be3b067}",  # FOLDERID_CommonStartMenu
+            "{a77f5d77-2e2b-44c3-a6a2-aba601054a51}",) # FOLDERID_Programs
 
         found_link_files = []
         for kf_guid in known_folders:
@@ -309,7 +315,7 @@ class WinSCP(kp.Plugin):
         for link_file in found_link_files:
             try:
                 link_props = kpu.read_link(link_file)
-                if (link_props['target'].lower().endswith(exe_name) and
+                if (link_props['target'].endswith(exe_name) and
                         os.path.exists(link_props['target'])):
                     return link_props['target']
             except Exception as exc:
