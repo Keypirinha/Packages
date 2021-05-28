@@ -283,9 +283,9 @@ class WinSCP(kp.Plugin):
         return None
 
     def _autodetect_official_installreg(self):
-        hklm = self._exe_from_reg(winreg.HKEY_LOCAL_MACHINE)
-        return (hklm if hklm is not None
-                else self._exe_from_reg(winreg.HKEY_CURRENT_USER))
+        hkcu = self._exe_from_reg(winreg.HKEY_CURRENT_USER)
+        return (hkcu if hkcu is not None
+                else self._exe_from_reg(winreg.HKEY_LOCAL_MACHINE))
 
     def _autodetect_official_progfiles(self):
         for hive in ('%PROGRAMFILES%', '%PROGRAMFILES(X86)%'):
