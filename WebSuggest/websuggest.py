@@ -489,7 +489,7 @@ class WebSuggest(kp.Plugin):
 
             # default_action
             item_default_action = settings.get_enum(
-                "default_action", self.CONFIG_SECTION_MAIN,
+                "default_action", section,
                 fallback=default_action, enum=self.actions_names)
 
             # provider
