@@ -8,20 +8,68 @@ from . import providers
 class Bookmarks(kp.Plugin):
     """Launch Chrome, Firefox, Internet Explorer and Vivaldi bookmarks."""
 
+    DEFAULT_GROUP_ITEM_LABEL = ""
     DEFAULT_ITEM_LABEL_FORMAT = "Bookmark: {label} ({provider})"
 
+    group_item_label = DEFAULT_GROUP_ITEM_LABEL
     item_label_format = DEFAULT_ITEM_LABEL_FORMAT
     keep_empty_names = True
     keep_auth_url = True
     force_new_window = None
     force_private_mode = None
 
+    bookmarks = []
+
     def __init__(self):
         super().__init__()
 
     def on_start(self):
-        # read user configuration
+        self._read_user_config()
+
+    def on_catalog(self):
+        # re-read user configuration
+        self._read_user_config()
+
+        self.bookmarks = self._create_bookmark_items()
+
+        if self.group_item_label == "" or self.group_item_label.isspace():
+            # Build catalog from bookmarks
+            self.set_catalog(self.bookmarks)
+        else:
+            # Create group catalog item
+            self.set_catalog([self.create_item(
+                category=kp.ItemCategory.KEYWORD,
+                label=self.group_item_label,
+                short_desc="Search and open browser bookmarks",
+                target=str(self.id()),
+                args_hint=kp.ItemArgsHint.REQUIRED,
+                hit_hint=kp.ItemHitHint.NOARGS)])
+
+    def on_suggest(self, user_input, items_chain):
+        if not items_chain or items_chain[0].category() != kp.ItemCategory.KEYWORD or items_chain[0].target() != str(self.id()):
+            return
+        self.set_suggestions(self.bookmarks)
+
+    def on_execute(self, item, action):
+        if action:
+            kpu.execute_default_action(self, item, action)
+        else:
+            kpu.web_browser_command(
+                private_mode=self.force_private_mode,
+                new_window=self.force_new_window,
+                url=item.target(),
+                execute=True)
+
+    def on_events(self, flags):
+        if flags & kp.Events.PACKCONFIG:
+            self.on_catalog()
+
+    def _read_user_config(self):
         settings = self.load_settings()
+        self.group_item_label = settings.get(
+                                    "group_item_label", "main",
+                                    self.DEFAULT_GROUP_ITEM_LABEL,
+                                    unquote=True)
         self.item_label_format = settings.get(
                                     "item_label_format", "main",
                                     self.DEFAULT_ITEM_LABEL_FORMAT,
@@ -35,12 +83,9 @@ class Bookmarks(kp.Plugin):
         self.force_private_mode = settings.get_bool(
                                     "force_private_mode", "main", None)
 
-    def on_catalog(self):
-        # re-read user configuration
-        self.on_start()
+    def _get_bookmarks(self):
         settings = self.load_settings()
 
-        # get bookmarks from every provider
         bookmarks = []
         for config_section in settings.sections():
             if not config_section.lower().startswith("provider/"):
@@ -62,8 +107,14 @@ class Bookmarks(kp.Plugin):
             if self.should_terminate():
                 return []
 
-        # build catalog
-        catalog = []
+        self.info("Referenced {} bookmark{}".format(
+                    len(bookmarks), "s"[len(bookmarks)==1:]))
+        return bookmarks
+
+    def _create_bookmark_items(self):
+        bookmarks = self._get_bookmarks()
+
+        bookmark_items = []
         for b in bookmarks:
             if isinstance(b, providers.Bookmark):
                 if not b.label or not b.url:
@@ -74,7 +125,7 @@ class Bookmarks(kp.Plugin):
                     continue
                 if "script" in b.scheme.lower(): # javascript, vbscript, ...
                     continue
-                catalog.append(self.create_item(
+                bookmark_items.append(self.create_item(
                     category=kp.ItemCategory.URL,
                     label=self.item_label_format.format(
                                     label=b.label, provider=b.provider_label),
@@ -101,25 +152,8 @@ class Bookmarks(kp.Plugin):
             #    b.set_short_desc("")
             #    b.set_label(self.item_label_format.format(
             #                        label=b.label(), provider=provider_label))
-            #    catalog.append(b)
+            #    bookmark_items.append(b)
             else:
                 self.err("Duh?! #3")
                 continue
-
-        self.set_catalog(catalog)
-        self.info("Referenced {} bookmark{}".format(
-                    len(catalog), "s"[len(catalog)==1:]))
-
-    def on_execute(self, item, action):
-        if action:
-            kpu.execute_default_action(self, item, action)
-        else:
-            kpu.web_browser_command(
-                private_mode=self.force_private_mode,
-                new_window=self.force_new_window,
-                url=item.target(),
-                execute=True)
-
-    def on_events(self, flags):
-        if flags & kp.Events.PACKCONFIG:
-            self.on_catalog()
+        return bookmark_items
