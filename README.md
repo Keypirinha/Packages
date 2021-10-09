@@ -38,6 +38,8 @@ license, which you can find in the `LICENSE` file located in this directory.
 * [@AngelEzquerra](https://github.com/AngelEzquerra):
   - Patch to add the `proc_name_first` setting to the `TaskSwitcher` package
   - Patch to add the `show_app_icons` setting to the `TaskSwitcher` package
+* [@Heck-R](https://github.com/Heck-R):
+  - Added `group_item_label` setting to the `Bookmarks` package
 * [@psistorm](https://github.com/psistorm):
   - Patch to allow predefined searches in the `Everything` package
 * [@ckolumbus](https://github.com/ckolumbus):
