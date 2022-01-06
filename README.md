@@ -47,3 +47,4 @@ license, which you can find in the `LICENSE` file located in this directory.
 * [@DrorHarari](https://github.com/DrorHarari):
   - Patch to add string reverse and camel-like case changes to the `String` package
   - Patch to add variable support to the 'Calc' package
+  - Patch to add multi-part calculation to the 'Calc' package (10+20+30;*1.3)
