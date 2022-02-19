@@ -413,6 +413,20 @@ class Calc(kp.Plugin):
                 args_hint=kp.ItemArgsHint.REQUIRED,
                 hit_hint=kp.ItemHitHint.NOARGS)])
 
+    def semicalc(self, expression):
+        while True:
+            semipos = expression.find(";")
+            if semipos < 0:
+                return expression
+            elif semipos == 0:
+                expression = expression[1:]
+            elif semipos + 1 == len(expression):
+                expression = expression[0:-1]
+            elif len(expression) > semipos and (expression[semipos+1].isalnum() or expression[semipos+1] in "(){}[]"):
+                return f"error: {expression}"
+            else:
+                expression = f"({expression[0:semipos]}){expression[semipos+1:]}"
+
     def on_suggest(self, user_input, items_chain):
         if items_chain and items_chain[0].category() == self.ITEMCAT_VAR:
             suggestions = []
@@ -447,7 +461,7 @@ class Calc(kp.Plugin):
 
         suggestions = []
         try:
-            results = self._eval(expression)
+            results = self._eval(self.semicalc(expression))
             if not isinstance(results, (tuple, list)):
                 results = (results,)
             for res in results:
