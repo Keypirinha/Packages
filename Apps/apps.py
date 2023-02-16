@@ -525,6 +525,14 @@ class CustomCmds(_BasePlugin):
             cmd_elevated = settings.get_bool(
                 "elevated", section=section, fallback=False)
 
+            icon_name = settings.get(
+                "icon_name", section=section, fallback=False)
+
+            if icon_name:
+                icon = self._config_icon(icon_name)
+            else:
+                icon = self._customcmd_icon(cmd_lines)
+
             cmd_has_placeholders = any(map(
                 lambda s: self.REGEX_PLACEHOLDER.search(s) is not None,
                 cmd_lines))
@@ -539,9 +547,28 @@ class CustomCmds(_BasePlugin):
                 'item_label': cmd_item_label,
                 'args_hint': cmd_args_hint,
                 'hit_hint': cmd_hit_hint,
-                'icon_handle': self._customcmd_icon(cmd_lines),
+                'icon_handle': icon,
                 'auto_terminal': cmd_auto_terminal,
                 'elevated': cmd_elevated}
+
+    def _config_icon(self, icon_name):
+        initFilePath = f"res://{self.package_full_name()}/"
+        resources = self.find_resources("*")
+        try:
+            location = []
+            sizes = [16, 32, 48, 256]
+            for size in sizes:
+                file_part_path = f"icons/{icon_name}/{icon_name}-{size}.ico"
+                if file_part_path in resources:
+                    location.append(f"{initFilePath}{file_part_path}")
+                else:
+                    self.info(f"Icon for file size {size} does not exist in path {file_part_path}")
+            return self.load_icon(location)
+
+        except ValueError:
+            self.info(f"No Icon files found for icon {icon_name}")
+            self.info(f"Please Read configuration which explains how to load icons")
+            return None
 
     def _customcmd_icon(self, cmd_lines):
         #for cmdline in cmd_lines:
